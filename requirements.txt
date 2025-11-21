@@ -1,0 +1,12 @@
+# Core dependencies
+torch
+transformers
+sentence-transformers
+rank-bm25
+scikit-learn
+chromadb
+pandas
+numpy
+pyyaml
+tqdm
+pytest
