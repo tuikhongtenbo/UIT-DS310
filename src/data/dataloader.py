@@ -4,14 +4,35 @@ Load legal corpus from JSON files
 """
 
 
-def load_legal_corpus(file_path: str) -> list:
+class VLQALoader:
     """
-    Load legal corpus from file.
-    
-    Args:
-        file_path: Path to legal corpus JSON file
-    
-    Returns:
-        List of legal documents
+    VLQA dataset loader 
     """
-    pass
+    
+    def __init__(self, encoding: str = "utf-8"):
+
+        self.encoding = encoding
+    
+    def load(self, file_path: str) -> list:
+        """
+        Load legal corpus from file.
+        
+        Args:
+            file_path: Path to legal corpus JSON file
+        
+        Returns:
+            List of legal documents
+        """
+        pass
+    
+    def load_legal_corpus(self, file_path: str) -> list:
+        """
+        Load legal corpus from file.
+        
+        Args:
+            file_path: Path to legal corpus JSON file
+        
+        Returns:
+            List of legal documents
+        """
+        return self.load(file_path)
