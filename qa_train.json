@@ -1,0 +1,14 @@
+[
+    {
+        "query": "đi xe máy phải làm gì",
+        "correct_id": "L01_A1"
+    },
+    {
+        "query": "có được vượt đèn đỏ không",
+        "correct_id": "L01_A2"
+    },
+    {
+        "query": "tham nhũng ngân hàng xử lý ra sao",
+        "correct_id": "L02_B1"
+    }
+]

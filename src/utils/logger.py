@@ -6,7 +6,6 @@ Logging utilities
 import logging
 import sys
 
-
 def setup_logger(name: str = "uit_ds310", level: str = "INFO"):
     """
     Setup logger for the project.
