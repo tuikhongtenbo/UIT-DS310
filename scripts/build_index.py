@@ -13,7 +13,7 @@ project_root = os.path.dirname(current_dir)
 sys.path.append(project_root)
 from config.config import cfg
 from src.utils.logger import setup_logger
-from.src.data.dataloader import VLQALoader
+from src.data.dataloader import VLQALoader
 from src.data.preprocessor import Preprocessor
 from src.data.chunking import DocumentChunker
 from src.embeddings.embedder import VietnameseEmbedder

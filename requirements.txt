@@ -1,12 +1,11 @@
 # Core dependencies
-torch
-transformers
-sentence-transformers
-rank-bm25
-scikit-learn
-chromadb
-pandas
-numpy
-pyyaml
-tqdm
-pytest
+torch>=2.0.0
+transformers>=4.30.0
+sentence-transformers>=2.2.0
+chromadb>=0.4.0
+numpy>=1.24.0
+pandas>=2.0.0
+pyyaml>=6.0
+tqdm>=4.65.0
+pytest>=7.0.0
+pytest-cov>=4.0.0
