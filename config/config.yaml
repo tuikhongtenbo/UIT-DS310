@@ -1,11 +1,11 @@
 # Retriever Module Configuration
 retriever:
   embedder:
-    model: "AITeamVN/Vietnamese_Embedding"  
-    chunk_size: 2048 
-    overlap: 128  
-    device: "cuda"  
-    batch_size: 32  
+    model: "AITeamVN/Vietnamese_Embedding"
+    chunk_size: 512
+    overlap: 64
+    device: "cuda"
+    batch_size: 32
   
   # Retriever models configuration
   models:
@@ -23,7 +23,7 @@ retriever:
     # SentenceBERT Dense Retriever
     sentencebert:
       enabled: true
-      model: "AITeamVN/Vietnamese_Embedding" 
+      model: "BAAI/bge-m3" 
       chroma_db_path: "./data/chroma_db_retriever"  
       collection_name: "retriever_legal_articles"  
   
@@ -31,7 +31,7 @@ retriever:
   mode: "ensemble"
   
   # Top-k results from retrieval stage
-  top_k: 100
+  top_k: 50
   
   # Ensemble configuration (when mode is "ensemble")
   ensemble:
@@ -41,20 +41,19 @@ retriever:
     weighted:
       weights:
         bm25: 0.3
-        tfidf: 0.2
         sentencebert: 0.5
 
 # Reranker Module Configuration
 reranker:
   # Embedder configuration 
   embedder:
-    model: "AITeamVN/Vietnamese_Embedding"  
-    chunk_size: 2048 
-    overlap: 128  
-    device: "cuda"  
+    model: "AITeamVN/Vietnamese_Embedding"
+    chunk_size: 2048
+    overlap: 128
+    device: "cuda"
     batch_size: 32
-    # ChromaDB config for reranker 
-    chroma_db_path: "./data/chroma_db_reranker"  
+    # ChromaDB config for reranker
+    chroma_db_path: "./data/chroma_db_reranker"
     collection_name: "reranker_legal_articles"  
   
   # Reranker models configuration
@@ -90,15 +89,19 @@ reranker:
     method: "rrf"  
     rrf:
       k: 60 
-    # Alternative: weighted ensemble (if method is "weighted")
-    weighted:
-      weights:
-        gte: 0.33
-        bge_v2: 0.34
-        jina: 0.33
   
   # Top-k results from reranking stage
-  top_k: 2  
+  top_k: 2
+
+  # LLM Reranker (Qwen)
+  qwen:
+    enabled: false  
+    model_name: "Qwen/Qwen2.5-7B-Instruct"
+    device: "cuda"  
+    max_new_tokens: 50
+    temperature: 0.1
+    threshold: 0.8  
+    max_content_length: 2048  
 
 # General Pipeline Configuration
 pipeline:

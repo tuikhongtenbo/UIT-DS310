@@ -2,7 +2,7 @@
 Qwen Reranker
 Qwen2.5 model for reranking documents using LLM inference
 """
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Union
 import json
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -20,10 +20,11 @@ class QwenReranker:
         device: str = None,
         torch_dtype: torch.dtype = torch.float16,
         max_new_tokens: int = 50,
-        temperature: float = 0.1
+        temperature: float = 0.1,
+        threshold: float = 0.8
     ):
         """
-        Initialize Qwen reranker.
+        Initialize Qwen reranker with threshold-based selection.
         """
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -32,39 +33,125 @@ class QwenReranker:
         self.model_name = model_name
         self.max_new_tokens = max_new_tokens
         self.temperature = temperature
+        self.threshold = threshold
+        self.max_content_length = 2000  
         
-        # Load tokenizer and model
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            torch_dtype=torch_dtype,
-            device_map="auto" if device == "cuda" else None
-        )
-        if device == "cpu":
-            self.model = self.model.to(device)
+        # Load tokenizer and model 
+        self.tokenizer = None
+        self.model = None
+        self._model_loaded = False
     
-    def rerank(self, query: str, documents: List[Dict[str, Any]], top_k: int = 1) -> List[Tuple[str, float]]:
-        """
-        Rerank documents for a given query using LLM inference.
+    def _load_model(self):
+        """Lazy load model only when needed (for LLM inference)"""
+        if self._model_loaded:
+            return
         
-        Args:
-            query: Search query
-            documents: List of document dicts with keys like 'aid' (article id) and 'content'
-            top_k: Number of top results to return (currently only top-1 is supported)
-        
-        Returns:
-            List of (document_id, score) tuples (score is always 1.0 for selected document)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+            device_map="auto" if self.device == "cuda" else None
+        )
+        if self.device == "cpu":
+            self.model = self.model.to(self.device)
+        self._model_loaded = True
+    
+    @staticmethod
+    def build_documents_dict(documents: List[Dict[str, Any]], id_key: str = "aid") -> Dict[str, Dict[str, Any]]:
         """
-        if not documents:
+        Build documents dictionary from list for efficient lookup.
+        
+        Example:
+            Input: [{"aid": "A1", "content": "..."}, {"aid": "A2", "content": "..."}]
+            Output: {"A1": {"aid": "A1", "content": "..."}, "A2": {"aid": "A2", "content": "..."}}
+        """
+        documents_dict = {}
+        for idx, doc in enumerate(documents):
+            # Get ID from document
+            doc_id = doc.get(id_key, doc.get("id", f"doc_{idx}"))
+            if doc_id:
+                documents_dict[doc_id] = doc
+        return documents_dict
+    
+    def _truncate_content(self, content: str, max_length: int = None) -> str:
+        """
+        Truncate content to prevent context window overflow.
+        """
+        if max_length is None:
+            max_length = self.max_content_length
+        
+        if len(content) <= max_length:
+            return content
+        
+        words = content.split()
+        if len(words) > max_length: 
+            return " ".join(words[:max_length]) + "..."
+
+        return content
+    
+    def rerank(
+        self, 
+        query: str, 
+        reranker_results: List[Tuple[str, float]], 
+        documents_dict: Dict[str, Dict[str, Any]],
+        top_k: int = 1
+    ) -> List[Tuple[str, float]]:
+        """
+        Select relevant article using threshold-based logic with LLM fallback.
+        
+        Logic:
+        1. If any article has score > threshold: select article with highest score
+        2. If no article > threshold: use LLM to select most relevant article
+        """
+        if not reranker_results:
             return []
         
-        # Format documents into context string
+        # Sort by score (descending)
+        sorted_results = sorted(reranker_results, key=lambda x: x[1], reverse=True)
+        
+        # Check if any article has score > threshold
+        max_score_article = sorted_results[0] if sorted_results else None
+        
+        if max_score_article and max_score_article[1] > self.threshold:
+            # Score > threshold: return article with highest score
+            return [max_score_article]
+        
+        # Score <= threshold: use LLM to select
+        return self._rerank_with_llm(query, sorted_results, documents_dict, top_k)
+    
+    def _rerank_with_llm(
+        self, 
+        query: str, 
+        reranker_results: List[Tuple[str, float]], 
+        documents_dict: Dict[str, Dict[str, Any]],
+        top_k: int = 1
+    ) -> List[Tuple[str, float]]:
+        """
+        Use LLM to select most relevant article from candidates.
+        """
+        if not reranker_results:
+            return []
+        
+        # Load model if not loaded
+        self._load_model()
+        
+        # Format documents into context string (use top candidates)
         context_str = ""
-        for doc in documents:
-            aid = doc.get('aid', doc.get('id', ''))
+        candidate_aids = []
+        for aid, score in reranker_results[:10]:  # Limit to top 10 for LLM
+            if aid not in documents_dict:
+                continue
+            doc = documents_dict[aid]
             content = doc.get('content', doc.get('text', ''))
-            context_str += f"Article ID: {aid}\nContent: {content}\n---\n"
+            if content:
+                # Truncate content 
+                truncated_content = self._truncate_content(content)
+                context_str += f"Article ID: {aid}\nScore: {score:.4f}\nContent: {truncated_content}\n---\n"
+                candidate_aids.append(aid)
+        
+        if not context_str or not candidate_aids:
+            # Fallback: return highest score article if no valid candidates
+            return [reranker_results[0]] if reranker_results else []
         
         # System prompt
         system_prompt = """You are a legal retrieval assistant. Your task is to analyze the user's query and the provided candidate articles.
@@ -76,7 +163,7 @@ class QwenReranker:
 Candidate Articles:
 {context_str}
 
-    Which article is the most relevant?"""
+Which article is the most relevant to the query?"""
         
         # Create messages list
         messages = [
@@ -111,8 +198,8 @@ Candidate Articles:
         ).strip()
         
         # Parse JSON output
+        selected_aid = None
         try:
-            # Try to extract JSON from the output
             json_start = generated_text.find('{')
             json_end = generated_text.rfind('}') + 1
             if json_start >= 0 and json_end > json_start:
@@ -121,28 +208,37 @@ Candidate Articles:
                 selected_aid = result.get('aid', '')
             else:
                 # Fallback: try to find aid in text
-                selected_aid = generated_text
+                selected_aid = generated_text.strip()
         except:
-            selected_aid = generated_text
+            selected_aid = generated_text.strip()
         
-        # Return result with score 1.0
-        if selected_aid:
+        # Return result with proper fallback logic
+        if not reranker_results:
+            return []
+        
+        if selected_aid and selected_aid in candidate_aids:
+            # LLM successfully selected a valid candidate
             return [(selected_aid, 1.0)]
-        return []
+        else:
+            # Fallback: return highest score article (already sorted by score descending)
+            return [reranker_results[0]]
     
-    def score(self, query: str, document: Dict[str, Any]) -> float:
+    def select_article(
+        self,
+        query: str,
+        reranker_results: List[Tuple[str, float]],
+        documents: Union[List[Dict[str, Any]], Dict[str, Dict[str, Any]]]
+    ) -> Tuple[str, float]:
         """
-        Calculate relevance score between query and document.
-        Returns 1.0 if document is selected, 0.0 otherwise.
-        
-        Args:
-            query: Search query
-            document: Document dict with 'aid' and 'content'
-        
-        Returns:
-            Relevance score (1.0 if selected, 0.0 otherwise)
+        Select the most relevant article using threshold-based logic.
         """
-        results = self.rerank(query, [document], top_k=1)
-        if results and results[0][0] == document.get('aid', document.get('id', '')):
-            return 1.0
-        return 0.0
+        # Convert List to Dict if needed
+        if isinstance(documents, list):
+            documents_dict = self.build_documents_dict(documents)
+        else:
+            documents_dict = documents
+        
+        results = self.rerank(query, reranker_results, documents_dict, top_k=1)
+        if results:
+            return results[0]
+        return (None, 0.0)

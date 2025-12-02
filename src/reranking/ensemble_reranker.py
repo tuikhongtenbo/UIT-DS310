@@ -11,7 +11,13 @@ class EnsembleReranker:
     """
     Ensemble reranker that combines multiple rerankers using RRF.
     """
-    def __init__(self, reranker_models: List[Union[str, SingleReranker]], rrf_k: int = 60):
+    def __init__(
+        self, 
+        reranker_models: List[Union[str, SingleReranker]], 
+        rrf_k: int = 60,
+        trust_remote_code: bool = True,
+        model_configs: Dict[str, Dict[str, Any]] = None
+    ):
         """
         Initialize ensemble reranker.
         """
@@ -21,9 +27,13 @@ class EnsembleReranker:
         # Initialize rerankers
         for model in reranker_models:
             if isinstance(model, str):
+                # Get config for this model if available
+                model_config = model_configs.get(model, {}) if model_configs else {}
                 reranker = SingleReranker(
                     model_name=model,
-                    trust_remote_code=trust_remote_code
+                    device=model_config.get("device"),
+                    trust_remote_code=trust_remote_code,
+                    max_length=model_config.get("max_length", 512)
                 )
                 self.rerankers.append(reranker)
             elif isinstance(model, SingleReranker):
@@ -31,44 +41,35 @@ class EnsembleReranker:
             else:
                 raise ValueError(f"Unsupported reranker type: {type(model)}")
     
-    def rerank(self, query: str, documents: List[Union[str, Dict[str, Any]]], top_k: int = None) -> List[Tuple[Union[int, str], float]]:
+    def rerank(
+        self, 
+        query: str, 
+        documents: Union[List[str], List[Dict[str, Any]]], 
+        top_k: int = None
+    ) -> List[Tuple[Union[int, str], float]]:
         """
         Rerank documents using ensemble of rerankers with RRF.
         
         Args:
             query: Search query
-            documents: List of document texts or dicts with 'content' key
+            documents: List of document texts (str) or dicts with 'content'/'text' and 'aid'/'id'
             top_k: Number of top results to return 
         
         Returns:
-            List of (document_index, rrf_score) tuples sorted by RRF score
+            List of (document_id, rrf_score) tuples sorted by RRF score
+            - If documents are strings: returns (index, score)
+            - If documents are dicts: returns (aid/id, score)
         """
         if not documents or not self.rerankers:
             return []
         
-        # Extract document texts if documents are dicts
-        if documents and isinstance(documents[0], dict):
-            doc_texts = [doc.get('content', doc.get('text', '')) for doc in documents]
-            doc_ids = [
-                doc.get('aid', doc.get('id', idx)) 
-                for idx, doc in enumerate(documents)
-            ]
-        else:
-            doc_texts = documents
-            doc_ids = list(range(len(documents)))
-        
-        # Get ranked lists from each reranker
+        # SingleReranker now handles both str and dict formats and returns (id, score)
         ranked_lists = []
         for reranker in self.rerankers:
-            # Rerank documents
-            reranked = reranker.rerank(query, doc_texts, top_k=None)
-            
-            # Map indices to document IDs
-            ranked_list = [
-                (doc_ids[idx], score) 
-                for idx, score in reranked
-            ]
-            ranked_lists.append(ranked_list)
+            # Rerank documents - SingleReranker will handle format conversion
+            reranked = reranker.rerank(query, documents, top_k=None)
+            # reranked is already in format [(doc_id, score), ...]
+            ranked_lists.append(reranked)
         
         # Combine using RRF
         rrf_results = reciprocal_rank_fusion(ranked_lists, k=self.rrf_k)
