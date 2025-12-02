@@ -7,6 +7,7 @@ import os
 import sys
 import uuid
 import json
+import shutil
 from typing import Any, Dict, List
 
 import chromadb
@@ -32,17 +33,59 @@ class ChromaIndex:
             persist_directory: Directory to persist ChromaDB
             collection_name: Name of the collection
         """
-        self.persist_directory = persist_directory
+        # Handle read-only paths by copying to working directory
+        actual_path = self._resolve_db_path(persist_directory)
+        
+        self.persist_directory = actual_path
         self.collection_name = collection_name
-        logger.info(f"Initialize ChromaDB at {persist_directory}")
+        logger.info(f"Initialize ChromaDB at {actual_path}")
 
         # Initialize PersistentClient
-        self.client = chromadb.PersistentClient(path=persist_directory)
+        self.client = chromadb.PersistentClient(path=actual_path)
         self.collection = self.client.get_or_create_collection(
             name=collection_name,
             metadata={"hnsw:space": "cosine"}
         )
         logger.info(f"Collection: {collection_name} is ready. Current count: {self.collection.count()}")
+    
+    def _resolve_db_path(self, path: str) -> str:
+        """
+        Resolve database path, copying from read-only location if needed.
+        
+        Args:
+            path: Original database path
+            
+        Returns:
+            Resolved path (writable location)
+        """
+        # If path is in Kaggle input (read-only), copy to working directory
+        if '/kaggle/input/' in path:
+            working_path = path.replace('/kaggle/input/', '/kaggle/working/')
+            
+            # If copy doesn't exist, create it
+            if not os.path.exists(working_path):
+                logger.info(f"Copying ChromaDB from read-only to writable location...")
+                logger.info(f"  From: {path}")
+                logger.info(f"  To:   {working_path}")
+                try:
+                    os.makedirs(os.path.dirname(working_path), exist_ok=True)
+                    # Use dirs_exist_ok for Python 3.8+, fallback for older versions
+                    try:
+                        shutil.copytree(path, working_path, dirs_exist_ok=True)
+                    except TypeError:
+                        if os.path.exists(working_path):
+                            shutil.rmtree(working_path)
+                        shutil.copytree(path, working_path)
+                    logger.info("Database copied successfully")
+                except Exception as e:
+                    logger.error(f"Failed to copy database: {e}")
+                    raise RuntimeError(f"Cannot copy ChromaDB from {path} to {working_path}: {e}")
+            else:
+                logger.info(f"Using existing copy at: {working_path}")
+            
+            return working_path
+        
+        return path
 
     def build_index(self, chunks: List[Dict[str, Any]], embedder, batch_size: int = 32):
         """
