@@ -71,13 +71,22 @@ class ExperimentPipeline:
             pipeline_config = self.config.get('pipeline', {})
             indexes_config = pipeline_config.get('indexes', {})
             bm25_index_path = indexes_config.get('bm25_index_path', './data/bm25_index.pkl')
+            # Normalize path - remove leading ./ if present
+            bm25_index_path = bm25_index_path.lstrip('./').lstrip('/')
             if not os.path.isabs(bm25_index_path):
                 bm25_index_path = os.path.join(current_dir, bm25_index_path)
+            # Normalize the final path to remove any double separators
+            bm25_index_path = os.path.normpath(bm25_index_path)
+            
             if os.path.exists(bm25_index_path):
                 bm25_retriever.load(bm25_index_path)
                 logger.info(f"BM25 index loaded from {bm25_index_path}")
             else:
-                logger.warning(f"BM25 index not found at {bm25_index_path}")
+                logger.error(f"BM25 index not found at {bm25_index_path}")
+                logger.error("BM25 retriever requires an index to work.")
+                logger.error("For Experiment 1, BM25 index is required but not found.")
+                logger.error("You can skip experiments that require BM25 (exp 1, 3, 4, 6, 7, 8, 9)")
+                logger.error("or build the BM25 index first if you have the legal corpus.")
         
         # Initialize Dense retriever if enabled
         if sentencebert_config.get('enabled', False):
