@@ -376,8 +376,10 @@ def main():
         # Run query through pipeline
         try:
             relevant_aids = pipeline.run_query(question)
-            # Convert aids to integers
+            # Convert aids to integers and remove duplicates
             relevant_laws = convert_aids_to_int(relevant_aids)
+            # Remove duplicates while preserving order
+            relevant_laws = list(dict.fromkeys(relevant_laws))
             results.append({
                 'qid': qid,
                 'relevant_laws': relevant_laws
@@ -390,12 +392,31 @@ def main():
                 'relevant_laws': []
             })
     
+    # Sort results by qid to ensure consistent order
+    results.sort(key=lambda x: x.get('qid', 0))
+    
+    # Validate: ensure all qids from input are present in results
+    input_qids = set(item.get('qid') for item in test_data)
+    result_qids = set(result.get('qid') for result in results)
+    missing_qids = input_qids - result_qids
+    if missing_qids:
+        logger.warning(f"Missing qids in results: {sorted(missing_qids)}")
+        # Add missing qids with empty relevant_laws
+        for qid in sorted(missing_qids):
+            results.append({
+                'qid': qid,
+                'relevant_laws': []
+            })
+        # Re-sort after adding missing qids
+        results.sort(key=lambda x: x.get('qid', 0))
+    
     # Save results
     output_path = args.output
     if not output_path:
         output_dir = os.path.join(current_dir, 'outputs')
         os.makedirs(output_dir, exist_ok=True)
-        output_path = os.path.join(output_dir, f'exp_{args.exp}_results.json')
+        # Default to results.json for submission format
+        output_path = os.path.join(output_dir, 'results.json')
     else:
         # Ensure output directory exists even if path is provided
         output_dir = os.path.dirname(output_path)
@@ -407,6 +428,8 @@ def main():
         json.dump(results, f, ensure_ascii=False, indent=2)
     
     logger.info(f"Experiment {args.exp} completed! Results saved to {output_path}")
+    logger.info(f"Total queries processed: {len(results)}")
+    logger.info(f"Format: [{{\"qid\": <int>, \"relevant_laws\": [<int>, ...]}}, ...]")
 
 
 if __name__ == "__main__":
