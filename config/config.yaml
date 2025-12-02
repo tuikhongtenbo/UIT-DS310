@@ -113,9 +113,9 @@ reranker:
 pipeline:
   # Data paths
   data:
-    legal_corpus_path: "./dataset/legal_corpus.json"
-    train_path: "./dataset/train.json"
-    test_path: "./dataset/public_test.json"
+    legal_corpus_path: "/kaggle/input/vlqa-dataset/legal_corpus.json"
+    train_path: "/kaggle/input/vlqa-dataset/train.json"
+    test_path: "/kaggle/input/vlqa-dataset/public_test.json"
 
   # Index paths
   indexes:
