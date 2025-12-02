@@ -1,0 +1,24 @@
+[
+    {
+        "law_id": "14/2022/TT-NHNN",
+        "content": [
+            {
+                "aid": "Article_1",
+                "content_Article": "Thông tư này quy định mã số, tiêu chuẩn chuyên môn, nghiệp vụ và xếp lương đối với các ngạch công chức chuyên ngành Ngân hàng."
+            },
+            {
+                "aid": "Article_2",
+                "content_Article": "Kiểm soát viên cao cấp ngân hàng Mã số: 07.044. Phải có bằng tốt nghiệp đại học trở lên, có chứng chỉ bồi dưỡng kiến thức quản lý nhà nước."
+            }
+        ]
+    },
+    {
+        "law_id": "Luật PCTN 2018",
+        "content": [
+            {
+                "aid": "Article_3",
+                "content_Article": "Tham nhũng là hành vi của người có chức vụ, quyền hạn đã lợi dụng chức vụ, quyền hạn đó vì vụ lợi."
+            }
+        ]
+    }
+]

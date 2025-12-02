@@ -1,43 +1,43 @@
 # Retriever Module Configuration
 retriever:
   embedder:
-    model: "AITeamVN/Vietnamese_Embedding"  
-    chunk_size: 2048 
-    overlap: 128  
-    device: "cuda"  
-    batch_size: 32  
-  
+    model: "AITeamVN/Vietnamese_Embedding"
+    chunk_size: 2048
+    overlap: 128
+    device: "cuda"
+    batch_size: 32
+
   # Retriever models configuration
   models:
     # BM25 Retriever
     bm25:
       enabled: true
-      k1: 1.5 
-      b: 0.75  
-    
+      k1: 1.5
+      b: 0.75
+
     # TF-IDF Retriever
     tfidf:
-      enabled: true
-      max_features: 10000 
-    
+      enabled: false
+      max_features: 10000
+
     # SentenceBERT Dense Retriever
     sentencebert:
       enabled: true
-      model: "AITeamVN/Vietnamese_Embedding" 
-      chroma_db_path: "./data/chroma_db_retriever"  
-      collection_name: "retriever_legal_articles"  
-  
+      model: "AITeamVN/Vietnamese_Embedding"
+      chroma_db_path: "./data/chroma_db_retriever"
+      collection_name: "retriever_legal_articles"
+
   # Retrieval mode: "sparse", "dense", "ensemble"
   mode: "ensemble"
-  
+
   # Top-k results from retrieval stage
   top_k: 100
-  
+
   # Ensemble configuration (when mode is "ensemble")
   ensemble:
-    method: "rrf"  
+    method: "rrf"
     rrf:
-      k: 60 
+      k: 60
     weighted:
       weights:
         bm25: 0.3
@@ -46,59 +46,59 @@ retriever:
 
 # Reranker Module Configuration
 reranker:
-  # Embedder configuration 
+  # Embedder configuration
   embedder:
-    model: "AITeamVN/Vietnamese_Embedding"  
-    chunk_size: 2048 
-    overlap: 128  
-    device: "cuda"  
+    model: "AITeamVN/Vietnamese_Embedding"
+    chunk_size: 2048
+    overlap: 128
+    device: "cuda"
     batch_size: 32
-    # ChromaDB config for reranker 
-    chroma_db_path: "./data/chroma_db_reranker"  
-    collection_name: "reranker_legal_articles"  
-  
+    # ChromaDB config for reranker
+    chroma_db_path: "./data/chroma_db_reranker"
+    collection_name: "reranker_legal_articles"
+
   # Reranker models configuration
   models:
 
     # GTE Reranker
     gte:
       enabled: true
-      model_name: "Booooooooooooo/gte-reranker-10e"  
-      device: "cuda" 
-      batch_size: 16  
-      max_length: 512  
-    
+      model_name: "Booooooooooooo/gte-reranker-10e"
+      device: "cuda"
+      batch_size: 16
+      max_length: 512
+
     # BGE Reranker v2
     bge_v2:
       enabled: true
-      model_name: "Booooooooooooo/bge-v2-reranker-10e" 
-      device: "cuda"  
-      batch_size: 16 
-      max_length: 512 
-    
+      model_name: "Booooooooooooo/bge-v2-reranker-10e"
+      device: "cuda"
+      batch_size: 16
+      max_length: 512
+
     # Jina Reranker
     jina:
       enabled: true
-      model_name: "Booooooooooooo/jina-reranker-10e"  
-      device: "cuda" 
-      batch_size: 16  
-      max_length: 512  
-  
+      model_name: "Booooooooooooo/jina-reranker-10e"
+      device: "cuda"
+      batch_size: 16
+      max_length: 512
+
   # Ensemble configuration for 3 rerankers using RRF
   ensemble:
-    enabled: true  
-    method: "rrf"  
+    enabled: true
+    method: "rrf"
     rrf:
-      k: 60 
+      k: 60
     # Alternative: weighted ensemble (if method is "weighted")
     weighted:
       weights:
         gte: 0.33
         bge_v2: 0.34
         jina: 0.33
-  
+
   # Top-k results from reranking stage
-  top_k: 2  
+  top_k: 2
 
 # General Pipeline Configuration
 pipeline:
@@ -107,21 +107,21 @@ pipeline:
     legal_corpus_path: "./dataset/legal_corpus.json"
     train_path: "./dataset/train.json"
     test_path: "./dataset/public_test.json"
-  
+
   # Index paths
   indexes:
     chroma_db_retriever_path: "./data/chroma_db_retriever"
     chroma_db_reranker_path: "./data/chroma_db_reranker"
     bm25_index_path: "./data/bm25_index.pkl"
     tfidf_index_path: "./data/tfidf_index.pkl"
-  
+
   # Evaluation
   evaluation:
-    metrics: ["f2", "recall", "precision"]  
-    top_k_values: [1, 2, 3, 5, 10]  
+    metrics: ["f2", "recall", "precision"]
+    top_k_values: [1, 2, 3, 5, 10]
 
 # System Configuration
 system:
-  device: "cuda"  
-  num_workers: 4 
-  seed: 42  
+  device: "cuda"
+  num_workers: 4
+  seed: 42

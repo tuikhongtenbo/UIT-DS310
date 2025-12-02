@@ -1,93 +1,101 @@
+# src/retrieval/dense_retriever.py
 """
-Dense Retriever
-Semantic retrieval using SentenceBERT embeddings from ChromaDB
+Dense Retriever Module
+Semantic retrieval using VietnameseEmbedder and ChromaIndex.
+Wrapper class to connect Embedding model and Database.
 """
-from typing import List, Tuple, Any
-from sentence_transformers import SentenceTransformer
+from typing import List, Tuple, Dict, Any, Optional
+import numpy as np
+
+from src.embeddings.chroma_index import ChromaIndex
+from src.embeddings.embedder import VietnameseEmbedder
+from src.utils.logger import setup_logger
+
+logger = setup_logger("dense_retriever")
 
 class DenseRetriever:
     """
-    Dense retriever using SentenceBERT embeddings
-    Queries from ChromaDB vector store
+    Dense Retriever wrapper.
+    Uses VietnameseEmbedder for encoding queries and ChromaIndex for retrieval.
     """
 
     def __init__(
         self,
-        model_name: str = "AITeamVN/Vietnamese_Embedding",
-        chroma_index=None
+        chroma_index: ChromaIndex,
+        embedder: VietnameseEmbedder
     ):
         """
-        Initialize dense retriever.
+        Initialize the DenseRetriever.
 
         Args:
-            model_name: Name of the SentenceBERT model
-            chroma_index: ChromaIndex instance (optional)
+            chroma_index: Instance of ChromaIndex (already initialized with DB path).
+            embedder: Instance of VietnameseEmbedder (already loaded model).
         """
+
+
         self.chroma_index = chroma_index
+        self.embedder = embedder
+        logger.info("DenseRetriever initialized with provided ChromaIndex and Embedder.")
 
-        print(f"Loading embedding model: {model_name}...")
-        self.model = SentenceTransformer(model_name)
-
-        if self.chroma_index is None:
-            print("Warning: chroma_index is None. You must provide a valid ChromaIndex instance to retrieve.")
-
-
-    def retrieve(self, query: str, top_k: int = 100) -> list:
+    def build_index(self, chunks: List[Dict[str, Any]], batch_size: int = 32):
         """
-        Retrieve top-k documents using semantic similarity from ChromaDB.
+        Delegate indexing task to ChromaIndex.
 
         Args:
-            query: Search query
-            top_k: Number of results to return
+            chunks: List of dictionaries [{'text': '...', 'metadata': {...}}, ...]
+            batch_size: Batch size for embedding generation.
+        """
+        logger.info(f"Delegating {len(chunks)} chunks to ChromaIndex for building...")
+        self.chroma_index.build_index(chunks, self.embedder, batch_size=batch_size)
+
+    def retrieve(self, query: str, top_k: int = 100) -> List[Tuple[str, float]]:
+        """
+        Retrieve top-k documents semantically.
+
+        Args:
+            query: The query string.
+            top_k: Number of documents to return.
 
         Returns:
-            List of (article_id, score) tuples (aggregated from chunks)
+            List of tuples: (doc_id, score). Score is Cosine Similarity [0, 1].
         """
-        if not self.chroma_index:
-            raise ValueError("ChromaIndex has not been initialized.")
+        if not query.strip():
+            return []
 
-        # 1. Encode query thành vector
-        # BGE-M3 có thể trả về dense, sparse, colbert vec. Ở đây ta dùng dense vec mặc định.
-        query_embedding = self.model.encode(query).tolist()
+        # 1. Encode query using the centralized Embedder
+        try:
+            query_embedding = self.embedder.encode(query)
 
-        # 2. Query từ ChromaDB
-        # Giả định self.chroma_index có thuộc tính 'collection' là chromadb.Collection
-        # Hoặc self.chroma_index chính là collection (tuỳ cách bạn implement file chroma_index.py)
-        collection = getattr(self.chroma_index, "collection", self.chroma_index)
+            if isinstance(query_embedding, np.ndarray):
+                if len(query_embedding.shape) > 1:
+                    query_vec = query_embedding[0].tolist()
+                else:
+                    query_vec = query_embedding.tolist()
+            else:
+                query_vec = query_embedding
 
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=top_k,
-            include=["metadatas", "distances", "documents"]
-        )
+        except Exception as e:
+            logger.error(f"Error encoding query: {e}")
+            raise e
 
-        # 3. Xử lý kết quả trả về
-        # ChromaDB trả về list lồng nhau (batch), ta lấy phần tử đầu tiên
+        # 2. Query ChromaDB via ChromaIndex
+        results = self.chroma_index.query(query_embedding=query_vec, n_results=top_k)
+
+        # 3. Parse Results
+        if not results or not results.get('ids') or not results['ids'][0]:
+            return []
+
         ids = results['ids'][0]
         distances = results['distances'][0]
-        metadatas = results['metadatas'][0] if results['metadatas'] else [{}] * len(ids)
 
         retrieved_items = []
 
-        for i in range(len(ids)):
-            chunk_id = ids[i]
-            distance = distances[i]
-            metadata = metadatas[i]
+        for i, doc_id in enumerate(ids):
+            dist = distances[i]
+            score = 1.0 - dist
 
-            # Chuyển distance thành similarity score
-            # Chroma mặc định dùng Cosine Distance (nếu config space='cosine')
-            # Score = 1 - Distance
-            score = 1.0 - distance
+            score = max(0.0, min(1.0, score))
 
-            # Lấy article_id từ metadata nếu có, nếu không thì dùng chunk_id
-            # Giả sử metadata lưu field là "article_id" hoặc "doc_id"
-            article_id = metadata.get('article_id', metadata.get('doc_id', chunk_id))
-
-            retrieved_items.append((article_id, score))
-
-        # Lưu ý: Vì đây là Dense Retriever trên chunks, kết quả trả về có thể chứa
-        # nhiều chunks thuộc cùng 1 article.
-        # Nếu bạn muốn aggregate (gộp điểm) theo article_id, bạn có thể xử lý thêm ở đây.
-        # Hiện tại trả về raw list theo docstring yêu cầu.
+            retrieved_items.append((doc_id, float(score)))
 
         return retrieved_items

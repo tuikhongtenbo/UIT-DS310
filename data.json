@@ -1,0 +1,24 @@
+[
+    {
+        "law_id": "L01",
+        "content": [
+            {
+                "aid": "A1",
+                "content_Article": "Người điều khiển xe máy phải đội mũ bảo hiểm và cài quai đúng quy cách."
+            },
+            {
+                "aid": "A2",
+                "content_Article": "Nghiêm cấm hành vi vượt đèn đỏ, đi ngược chiều, lạng lách đánh võng."
+            }
+        ]
+    },
+    {
+        "law_id": "L02",
+        "content": [
+            {
+                "aid": "B1",
+                "content_Article": "Hành vi tham nhũng trong ngân hàng sẽ bị xử lý hình sự nghiêm minh."
+            }
+        ]
+    }
+]
