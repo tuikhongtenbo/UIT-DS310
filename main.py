@@ -6,6 +6,7 @@ import sys
 import os
 import json
 import argparse
+import re
 from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
 
@@ -329,6 +330,33 @@ def main():
     
     logger.info(f"Processing {len(test_data)} queries...")
     
+    # Helper function to convert aids to integers
+    def convert_aids_to_int(aids):
+        """Convert list of aid strings/ints to integers, filtering out invalid values"""
+        result = []
+        for aid in aids:
+            try:
+                # If already an int, use it directly
+                if isinstance(aid, int):
+                    result.append(aid)
+                else:
+                    # Try to convert string to int directly
+                    aid_str = str(aid).strip()
+                    try:
+                        result.append(int(aid_str))
+                    except ValueError:
+                        # If direct conversion fails, extract numbers from string
+                        # e.g., "law_1_article_5" -> extract 5
+                        numbers = re.findall(r'\d+', aid_str)
+                        if numbers:
+                            result.append(int(numbers[-1]))
+                        else:
+                            logger.warning(f"Could not extract number from aid: {aid}")
+            except Exception as e:
+                logger.warning(f"Error converting aid to int: {aid}, error: {e}")
+                continue
+        return result
+    
     # Process each query
     results = []
     for idx, item in enumerate(test_data):
@@ -339,9 +367,7 @@ def main():
             logger.warning(f"Empty question for qid {qid}, skipping...")
             results.append({
                 'qid': qid,
-                'question': question,
-                'relevant_laws': [],
-                'answer': ''
+                'relevant_laws': []
             })
             continue
         
@@ -350,20 +376,18 @@ def main():
         # Run query through pipeline
         try:
             relevant_aids = pipeline.run_query(question)
+            # Convert aids to integers
+            relevant_laws = convert_aids_to_int(relevant_aids)
             results.append({
                 'qid': qid,
-                'question': question,
-                'relevant_laws': relevant_aids,
-                'answer': ''
+                'relevant_laws': relevant_laws
             })
-            logger.info(f"Query {qid}: Found {len(relevant_aids)} relevant laws")
+            logger.info(f"Query {qid}: Found {len(relevant_laws)} relevant laws")
         except Exception as e:
             logger.error(f"Error processing query {qid}: {e}")
             results.append({
                 'qid': qid,
-                'question': question,
-                'relevant_laws': [],
-                'answer': ''
+                'relevant_laws': []
             })
     
     # Save results
