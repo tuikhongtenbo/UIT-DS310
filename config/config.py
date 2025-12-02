@@ -10,7 +10,11 @@ class AppConfig:
     Configuration loader class to handle YAML config file
     """
     def __init__(self, config_path: str = "config/config.yaml"):
-        self.config_path = PROJECT_ROOT / config_path
+        # Handle both absolute and relative paths
+        if os.path.isabs(config_path):
+            self.config_path = Path(config_path)
+        else:
+            self.config_path = PROJECT_ROOT / config_path
         self._config = self._load_config()
 
     def _load_config(self) -> Dict[str, Any]:

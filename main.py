@@ -287,8 +287,13 @@ def main():
     
     # Load config
     config_path = f"config/exp_{args.exp}.yaml"
+    if not os.path.isabs(config_path):
+        config_path = os.path.join(current_dir, config_path)
+    
     if not os.path.exists(config_path):
         logger.error(f"Config file not found: {config_path}")
+        logger.error(f"Current directory: {current_dir}")
+        logger.error(f"Looking for: {config_path}")
         return
     
     logger.info(f"Running experiment {args.exp} with config: {config_path}")
