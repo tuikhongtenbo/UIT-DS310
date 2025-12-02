@@ -71,12 +71,16 @@ class ExperimentPipeline:
             pipeline_config = self.config.get('pipeline', {})
             indexes_config = pipeline_config.get('indexes', {})
             bm25_index_path = indexes_config.get('bm25_index_path', './data/bm25_index.pkl')
-            # Normalize path - remove leading ./ if present
-            bm25_index_path = bm25_index_path.lstrip('./').lstrip('/')
-            if not os.path.isabs(bm25_index_path):
+            
+            # Handle path: if absolute, use as-is; if relative, join with current_dir
+            if os.path.isabs(bm25_index_path):
+                # Absolute path - use directly
+                bm25_index_path = os.path.normpath(bm25_index_path)
+            else:
+                # Relative path - remove leading ./ if present and join with current_dir
+                bm25_index_path = bm25_index_path.lstrip('./')
                 bm25_index_path = os.path.join(current_dir, bm25_index_path)
-            # Normalize the final path to remove any double separators
-            bm25_index_path = os.path.normpath(bm25_index_path)
+                bm25_index_path = os.path.normpath(bm25_index_path)
             
             if os.path.exists(bm25_index_path):
                 bm25_retriever.load(bm25_index_path)
@@ -368,6 +372,11 @@ def main():
         output_dir = os.path.join(current_dir, 'outputs')
         os.makedirs(output_dir, exist_ok=True)
         output_path = os.path.join(output_dir, f'exp_{args.exp}_results.json')
+    else:
+        # Ensure output directory exists even if path is provided
+        output_dir = os.path.dirname(output_path)
+        if output_dir:  # If there's a directory component
+            os.makedirs(output_dir, exist_ok=True)
     
     logger.info(f"Saving results to: {output_path}")
     with open(output_path, 'w', encoding='utf-8') as f:
