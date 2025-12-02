@@ -1,0 +1,90 @@
+# Experiment 6: Ensemble Retriever + Reranker, Top-k=50, BM25+BGE-M3 + Cross-Encoder
+retriever:
+  embedder:
+    model: "AITeamVN/Vietnamese_Embedding"
+    chunk_size: 512
+    overlap: 64
+    device: "cuda"
+    batch_size: 32
+
+  models:
+    bm25:
+      enabled: true
+      k1: 1.5
+      b: 0.75
+    tfidf:
+      enabled: false
+    sentencebert:
+      enabled: true
+      model: "AITeamVN/Vietnamese_Embedding"
+      chroma_db_path: "./data/chroma_db_retriever"
+      collection_name: "retriever_legal_articles"
+
+  mode: "ensemble"
+  top_k: 50
+
+  ensemble:
+    method: "rrf"
+    rrf:
+      k: 60
+    weighted:
+      weights:
+        bm25: 0.3
+        sentencebert: 0.5
+
+reranker:
+  embedder:
+    model: "AITeamVN/Vietnamese_Embedding"
+    chunk_size: 2048
+    overlap: 128
+    device: "cuda"
+    batch_size: 32
+    chroma_db_path: "./data/chroma_db_reranker"
+    collection_name: "reranker_legal_articles"
+
+  models:
+    gte:
+      enabled: true
+      model_name: "Booooooooooooo/gte-reranker-10e"
+      device: "cuda"
+      batch_size: 16
+      max_length: 512
+    bge_v2:
+      enabled: true
+      model_name: "Booooooooooooo/bge-v2-reranker-10e"
+      device: "cuda"
+      batch_size: 16
+      max_length: 512
+    jina:
+      enabled: true
+      model_name: "Booooooooooooo/jina-reranker-10e"
+      device: "cuda"
+      batch_size: 16
+      max_length: 512
+
+  ensemble:
+    enabled: true
+    method: "rrf"
+    rrf:
+      k: 60
+
+  top_k: 2
+
+  qwen:
+    enabled: false
+
+pipeline:
+  data:
+    legal_corpus_path: "./dataset/legal_corpus.json"
+    test_path: "./dataset/public_test.json"
+
+  indexes:
+    chroma_db_retriever_path: "./data/chroma_db_retriever"
+    chroma_db_reranker_path: "./data/chroma_db_reranker"
+    bm25_index_path: "./data/bm25_index.pkl"
+    tfidf_index_path: "./data/tfidf_index.pkl"
+
+system:
+  device: "cuda"
+  num_workers: 4
+  seed: 42

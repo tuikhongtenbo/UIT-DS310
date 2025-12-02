@@ -1,0 +1,63 @@
+# Experiment 1: Retriever-only, Top-k=1, BM25 only
+retriever:
+  embedder:
+    model: "AITeamVN/Vietnamese_Embedding"
+    chunk_size: 512
+    overlap: 64
+    device: "cuda"
+    batch_size: 32
+
+  models:
+    bm25:
+      enabled: true
+      k1: 1.5
+      b: 0.75
+    tfidf:
+      enabled: false
+    sentencebert:
+      enabled: false
+
+  mode: "sparse"
+  top_k: 1
+
+reranker:
+  embedder:
+    model: "AITeamVN/Vietnamese_Embedding"
+    chunk_size: 2048
+    overlap: 128
+    device: "cuda"
+    batch_size: 32
+    chroma_db_path: "./data/chroma_db_reranker"
+    collection_name: "reranker_legal_articles"
+
+  models:
+    gte:
+      enabled: false
+    bge_v2:
+      enabled: false
+    jina:
+      enabled: false
+
+  ensemble:
+    enabled: false
+
+  top_k: 1
+
+  qwen:
+    enabled: false
+
+pipeline:
+  data:
+    legal_corpus_path: "./dataset/legal_corpus.json"
+    test_path: "./dataset/public_test.json"
+
+  indexes:
+    chroma_db_retriever_path: "./data/chroma_db_retriever"
+    chroma_db_reranker_path: "./data/chroma_db_reranker"
+    bm25_index_path: "./data/bm25_index.pkl"
+    tfidf_index_path: "./data/tfidf_index.pkl"
+
+system:
+  device: "cuda"
+  num_workers: 4
+  seed: 42
