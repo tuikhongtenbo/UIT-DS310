@@ -95,13 +95,13 @@ reranker:
 
   # LLM Reranker (Qwen)
   qwen:
-    enabled: false  
+    enabled: false
     model_name: "Qwen/Qwen2.5-7B-Instruct"
-    device: "cuda"  
+    device: "cuda"
     max_new_tokens: 50
     temperature: 0.1
-    threshold: 0.8  
-    max_content_length: 2048  
+    threshold: 0.8
+    max_content_length: 2048
 
 # General Pipeline Configuration
 pipeline:
