@@ -242,33 +242,63 @@ class ExperimentPipeline:
             # Query reranker ChromaDB to get documents (article-level)
             reranker_results = reranker_chroma.query(
                 query_embedding=query_embedding,
-                n_results=min(self.retriever_top_k, 100)
+                n_results=min(max(len(retrieved_aids), self.retriever_top_k), 100)
             )
             
             if reranker_results and reranker_results.get('documents'):
                 # Format documents for reranker
                 formatted_docs = format_chroma_to_reranker(reranker_results)
                 
+                # Filter to only include documents with aids in retrieved_aids
+                # This ensures we rerank only the documents retrieved by BM25
+                retrieved_aids_set = set(retrieved_aids)
+                filtered_docs = [
+                    doc for doc in formatted_docs 
+                    if str(doc.get('aid', '')) in retrieved_aids_set
+                ]
+                
+                # If no matching documents found, fallback to retrieved aids
+                if not filtered_docs:
+                    logger.warning(f"No matching documents found in reranker ChromaDB for retrieved_aids. Using retrieved_aids directly.")
+                    return retrieved_aids[:self.reranker_top_k] if self.reranker_top_k else retrieved_aids
+                
                 # Rerank with Cross-Encoder
                 if self.reranker:
-                    reranked_results = self.reranker.rerank(query, formatted_docs, top_k=self.reranker_top_k)
-                    # Extract aids from reranked results
-                    final_aids = [str(aid) for aid, score in reranked_results]
+                    reranked_results = self.reranker.rerank(query, filtered_docs, top_k=self.reranker_top_k)
+                    # reranked_results is List[Tuple[str, float]] - (aid, score)
                 else:
-                    # If no cross-encoder, use retrieved aids
-                    final_aids = retrieved_aids[:self.reranker_top_k]
+                    # If no cross-encoder, create dummy results from filtered_docs
+                    # Only include aids that are in filtered_docs (available in reranker ChromaDB)
+                    # Qwen reranker needs List[Tuple[str, float]] format
+                    filtered_aids_set = {str(doc.get('aid', '')) for doc in filtered_docs}
+                    reranked_results = [
+                        (aid, 1.0) for aid in retrieved_aids[:self.reranker_top_k]
+                        if aid in filtered_aids_set
+                    ]
                 
                 # Apply Qwen reranker if enabled
-                if self.qwen_reranker and final_aids:
-                    # Get documents for Qwen reranker
-                    qwen_docs = [doc for doc in formatted_docs if str(doc.get('aid', '')) in final_aids]
-                    if qwen_docs:
-                        qwen_results = self.qwen_reranker.rerank(query, qwen_docs)
-                        final_aids = [str(aid) for aid, score in qwen_results]
+                if self.qwen_reranker and reranked_results:
+                    # Build documents_dict for Qwen reranker
+                    # Qwen reranker needs Dict[str, Dict[str, Any]] with aid as key
+                    documents_dict = self.qwen_reranker.build_documents_dict(filtered_docs, id_key="aid")
+                    
+                    # Qwen reranker takes: query, reranker_results (List[Tuple[str, float]]), documents_dict
+                    qwen_results = self.qwen_reranker.rerank(
+                        query, 
+                        reranked_results, 
+                        documents_dict, 
+                        top_k=self.reranker_top_k
+                    )
+                    # Extract aids from Qwen results
+                    final_aids = [str(aid) for aid, score in qwen_results]
+                else:
+                    # No Qwen reranker, use cross-encoder results
+                    final_aids = [str(aid) for aid, score in reranked_results]
                 
                 return final_aids
             else:
                 # Fallback to retrieved aids
+                logger.warning("Reranker ChromaDB query returned no results. Using retrieved_aids directly.")
                 return retrieved_aids[:self.reranker_top_k] if self.reranker_top_k else retrieved_aids
         else:
             # No reranker, return retrieved aids

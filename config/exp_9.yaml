@@ -68,7 +68,7 @@ reranker:
     rrf:
       k: 60
 
-  top_k: 2
+  top_k: 10
 
   qwen:
     enabled: true
