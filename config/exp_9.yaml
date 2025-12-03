@@ -56,7 +56,7 @@ reranker:
       batch_size: 16
       max_length: 512
     jina:
-      enabled: true
+      enabled: false
       model_name: "Booooooooooooo/jina-reranker-10e"
       device: "cuda"
       batch_size: 16

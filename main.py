@@ -284,50 +284,52 @@ class ExperimentPipeline:
             logger.error("Retriever not initialized")
             return []
         
-        # retrieved_results bây giờ luôn là list các (aid, score)
-        # bất kể là BM25, Dense hay Ensemble
+        # Lấy số lượng candidates đủ lớn từ Retriever 
         retrieved_results = self.retriever.retrieve(query, top_k=self.retriever_top_k)
         
         if not retrieved_results:
             return []
         
-        # Lấy list AID (đã được chuẩn hóa từ DenseRetriever)
         retrieved_aids = [str(aid) for aid, _ in retrieved_results]
         
-        # Step 2: Rerank if reranker is enabled
+        # Step 2: Rerank check
         if not (self.reranker or self.qwen_reranker):
             return retrieved_aids[:self.reranker_top_k] if self.reranker_top_k else retrieved_aids
         
-        # Get documents from reranker ChromaDB
+        # Get documents content from ChromaDB (for Cross-Encoder or fallback)
         filtered_docs = self._get_reranker_documents(retrieved_aids)
         
+        # Nếu không lấy được docs, trả về kết quả retriever
         if not filtered_docs:
             logger.warning("No docs found for reranking, returning retrieval results")
             return retrieved_aids[:self.reranker_top_k] if self.reranker_top_k else retrieved_aids
         
-        # Thực hiện Rerank
         try:
+            # --- GIAI ĐOẠN 1: CROSS-ENCODER (Optional) ---
             if self.reranker:
-                # Cross-Encoder
-                reranked_results = self.reranker.rerank(query, filtered_docs, top_k=self.reranker_top_k)
+                # Nếu có Cross-Encoder, ta rerank
+                intermediate_k = min(30, len(filtered_docs))
+                reranked_results = self.reranker.rerank(query, filtered_docs, top_k=intermediate_k)
             else:
-                # Dummy pass-through
-                reranked_results = [(d['aid'], 1.0) for d in filtered_docs][:self.reranker_top_k]
+                # Nếu không có Cross-Encoder, giữ nguyên danh sách và thứ tự từ Retriever
+                reranked_results = [(d['aid'], 1.0) for d in filtered_docs]
             
-            # Qwen Rerank (Chain)
+            # --- GIAI ĐOẠN 2: QWEN LLM (Optional) ---
             if self.qwen_reranker and reranked_results:
-                # Get top-10 aids from reranked results (Qwen uses up to 10 internally)
-                # Use min(10, len(reranked_results)) to ensure we pass enough candidates
-                num_candidates = min(10, len(reranked_results))
-                top_aids = [str(aid) for aid, _ in reranked_results[:num_candidates]]
+                num_candidates_for_qwen = min(15, len(reranked_results))
+                qwen_candidates = reranked_results[:num_candidates_for_qwen]
                 
-                # Build documents dict for Qwen using content from legal_corpus.json
+                # Lấy danh sách AID để chuẩn bị content
+                top_aids = [str(aid) for aid, _ in qwen_candidates]
+                
+                # Build documents dict cho Qwen
                 qwen_docs = []
                 for aid in top_aids:
-                    # Try to get content from legal_corpus.json first
+                    # Ưu tiên lấy từ RAM (legal_corpus_dict) 
                     content = self.legal_corpus_dict.get(aid, '')
+                    
+                    # Fallback: Lấy từ filtered_docs (ChromaDB)
                     if not content:
-                        # Fallback: try to find in filtered_docs
                         for doc in filtered_docs:
                             if str(doc.get('aid', '')) == aid:
                                 content = doc.get('content', doc.get('text', ''))
@@ -342,20 +344,24 @@ class ExperimentPipeline:
                 
                 if qwen_docs:
                     documents_dict = self.qwen_reranker.build_documents_dict(qwen_docs, id_key="aid")
-                    # Pass top candidates to Qwen (up to 10)
-                    qwen_candidates = reranked_results[:num_candidates]
+                    
+                    # Qwen rerank và trả về kết quả cuối cùng đã được cắt top_k
                     qwen_results = self.qwen_reranker.rerank(
-                        query, qwen_candidates, documents_dict, top_k=self.reranker_top_k
+                        query, 
+                        qwen_candidates, 
+                        documents_dict, 
+                        top_k=self.reranker_top_k  # Cắt kết quả cuối cùng tại đây
                     )
                     return [str(aid) for aid, _ in qwen_results]
                 else:
-                    logger.warning("No documents found for Qwen reranker, using reranked results")
-                    return [str(aid) for aid, _ in reranked_results[:self.reranker_top_k]]
+                    logger.warning("No documents found for Qwen reranker, using previous results")
             
-            return [str(aid) for aid, _ in reranked_results]
+            # Nếu không chạy Qwen (hoặc Qwen lỗi/rỗng), trả về kết quả từ Giai đoạn 1 và cắt top_k
+            return [str(aid) for aid, _ in reranked_results][:self.reranker_top_k]
         
         except Exception as e:
             logger.error(f"Reranking failed: {e}")
+            # Fallback an toàn
             return retrieved_aids[:self.reranker_top_k] if self.reranker_top_k else retrieved_aids
 
 
