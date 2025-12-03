@@ -155,7 +155,7 @@ class QwenReranker:
         
         # System prompt
         system_prompt = """You are a legal retrieval assistant. Your task is to analyze the user's query and the provided candidate articles.
-                    Identify the ONE article that is most relevant and directly answers the query.
+                    Identify  articles that is most relevant and directly answers the query.
                     CRITICAL INSTRUCTION: Output ONLY the Article ID (aid) in JSON format like this: {"aid": "..."}. Do not provide explanations."""
         
         user_prompt = f"""Query: {query}
@@ -200,17 +200,29 @@ Which article is the most relevant to the query?"""
         # Parse JSON output
         selected_aid = None
         try:
-            json_start = generated_text.find('{')
-            json_end = generated_text.rfind('}') + 1
-            if json_start >= 0 and json_end > json_start:
-                json_str = generated_text[json_start:json_end]
-                result = json.loads(json_str)
-                selected_aid = result.get('aid', '')
-            else:
-                # Fallback: try to find aid in text
+            # Try to parse JSON directly first
+            result = json.loads(generated_text)
+            selected_aid = result.get('aid', '')
+        except json.JSONDecodeError:
+            # If direct parsing fails, try to extract JSON from text
+            try:
+                json_start = generated_text.find('{')
+                json_end = generated_text.rfind('}') + 1
+                if json_start >= 0 and json_end > json_start:
+                    json_str = generated_text[json_start:json_end]
+                    result = json.loads(json_str)
+                    selected_aid = result.get('aid', '')
+                else:
+                    # Fallback: try to extract aid from text (e.g., "aid": "art_01")
+                    import re
+                    match = re.search(r'"aid"\s*:\s*"([^"]+)"', generated_text)
+                    if match:
+                        selected_aid = match.group(1)
+                    else:
+                        selected_aid = generated_text.strip()
+            except Exception:
+                # Last fallback: use raw text
                 selected_aid = generated_text.strip()
-        except:
-            selected_aid = generated_text.strip()
         
         # Return result with proper fallback logic
         if not reranker_results:
