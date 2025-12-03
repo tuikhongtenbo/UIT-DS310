@@ -73,15 +73,8 @@ class ExperimentPipeline:
             indexes_config = pipeline_config.get('indexes', {})
             bm25_index_path = indexes_config.get('bm25_index_path', './data/bm25_index.pkl')
             
-            # Handle path: if absolute, use as-is; if relative, join with current_dir
-            if os.path.isabs(bm25_index_path):
-                # Absolute path - use directly
-                bm25_index_path = os.path.normpath(bm25_index_path)
-            else:
-                # Relative path - remove leading ./ if present and join with current_dir
-                bm25_index_path = bm25_index_path.lstrip('./')
-                bm25_index_path = os.path.join(current_dir, bm25_index_path)
-                bm25_index_path = os.path.normpath(bm25_index_path)
+            # Resolve path
+            bm25_index_path = self._resolve_path(bm25_index_path)
             
             if os.path.exists(bm25_index_path):
                 bm25_retriever.load(bm25_index_path)
@@ -98,9 +91,7 @@ class ExperimentPipeline:
             logger.info("Initializing Dense retriever...")
             pipeline_config = self.config.get('pipeline', {})
             indexes_config = pipeline_config.get('indexes', {})
-            chroma_path = indexes_config.get('chroma_db_retriever_path', './data/chroma_db_retriever')
-            if not os.path.isabs(chroma_path):
-                chroma_path = os.path.join(current_dir, chroma_path)
+            chroma_path = self._resolve_path(indexes_config.get('chroma_db_retriever_path', './data/chroma_db_retriever'))
             
             collection_name = sentencebert_config.get('collection_name', 'retriever_legal_articles')
             chroma_index = ChromaIndex(persist_directory=chroma_path, collection_name=collection_name)
@@ -156,6 +147,83 @@ class ExperimentPipeline:
         
         self.reranker_top_k = reranker_config.get('top_k', 2)
     
+    def _resolve_path(self, path: str) -> str:
+        """Resolve absolute or relative path"""
+        if os.path.isabs(path):
+            return os.path.normpath(path)
+        path = path.lstrip('./')
+        return os.path.normpath(os.path.join(current_dir, path))
+    
+    
+    def _get_reranker_documents(self, retrieved_aids: List[str]) -> List[Dict[str, Any]]:
+        """Get documents from reranker ChromaDB using .get() with where clause"""
+        # Get reranker ChromaDB config
+        reranker_config = self.config.get('reranker', {})
+        embedder_config = reranker_config.get('embedder', {})
+        pipeline_config = self.config.get('pipeline', {})
+        indexes_config = pipeline_config.get('indexes', {})
+        chroma_path = self._resolve_path(indexes_config.get('chroma_db_reranker_path', './data/chroma_db_reranker'))
+        collection_name = embedder_config.get('collection_name', 'reranker_legal_articles')
+        
+        try:
+            reranker_chroma = ChromaIndex(persist_directory=chroma_path, collection_name=collection_name)
+        except Exception as e:
+            logger.error(f"Cannot init Reranker DB: {e}")
+            return []
+        
+        # Batch query để lấy nội dung bài luật từ Reranker DB
+        batch_size = 50
+        found_docs_map = {}
+        
+        # Lấy dư ra chút để lọc
+        all_aids_to_fetch = retrieved_aids[:self.retriever_top_k * 2] if hasattr(self, 'retriever_top_k') else retrieved_aids
+        
+        for i in range(0, len(all_aids_to_fetch), batch_size):
+            batch = all_aids_to_fetch[i:i + batch_size]
+            
+            try:
+                # Thử query bằng string
+                results = reranker_chroma.collection.get(
+                    where={"aid": {"$in": batch}},
+                    include=["documents", "metadatas"]
+                )
+                
+                # Nếu không có kết quả, thử query bằng int (phòng trường hợp lưu metadata dạng số)
+                if not results['ids']:
+                    batch_int = [int(x) for x in batch if x.isdigit()]
+                    if batch_int:
+                        results = reranker_chroma.collection.get(
+                            where={"aid": {"$in": batch_int}},
+                            include=["documents", "metadatas"]
+                        )
+                
+                # Gom nội dung
+                if results.get('ids'):
+                    for j, text in enumerate(results['documents']):
+                        meta = results['metadatas'][j] if j < len(results['metadatas']) else {}
+                        aid = str(meta.get('aid', ''))
+                        if aid:
+                            if aid not in found_docs_map:
+                                found_docs_map[aid] = []
+                            found_docs_map[aid].append(text)
+            
+            except Exception as e:
+                logger.warning(f"Error fetching batch for rerank: {e}")
+                continue
+        
+        # Tạo list docs để rerank (giữ đúng thứ tự từ retriever)
+        filtered_docs = []
+        for aid in all_aids_to_fetch:
+            if aid in found_docs_map:
+                full_text = " ".join(found_docs_map[aid])
+                filtered_docs.append({
+                    "aid": aid,
+                    "text": full_text,      # Cho SingleReranker cũ
+                    "content": full_text    # Cho SingleReranker mới
+                })
+        
+        return filtered_docs
+    
     def run_query(self, query: str) -> List[str]:
         """
         Run query through pipeline and return list of aid
@@ -171,137 +239,48 @@ class ExperimentPipeline:
             logger.error("Retriever not initialized")
             return []
         
+        # retrieved_results bây giờ luôn là list các (aid, score)
+        # bất kể là BM25, Dense hay Ensemble
         retrieved_results = self.retriever.retrieve(query, top_k=self.retriever_top_k)
         
         if not retrieved_results:
             return []
         
-        # Step 2: Extract aids from retrieved results
-        retrieved_aids = []
+        # Lấy list AID (đã được chuẩn hóa từ DenseRetriever)
+        retrieved_aids = [str(aid) for aid, _ in retrieved_results]
         
-        # Check if we need to get metadata from ChromaDB (for Dense retriever)
-        retriever_config = self.config.get('retriever', {})
-        models_config = retriever_config.get('models', {})
-        sentencebert_config = models_config.get('sentencebert', {})
-        is_dense = sentencebert_config.get('enabled', False)
+        # Step 2: Rerank if reranker is enabled
+        if not (self.reranker or self.qwen_reranker):
+            return retrieved_aids[:self.reranker_top_k] if self.reranker_top_k else retrieved_aids
         
-        if is_dense:
-            # For Dense retriever, doc_id is ChromaDB ID, need to get metadata to extract aid
-            pipeline_config = self.config.get('pipeline', {})
-            indexes_config = pipeline_config.get('indexes', {})
-            chroma_path = indexes_config.get('chroma_db_retriever_path', './data/chroma_db_retriever')
-            if not os.path.isabs(chroma_path):
-                chroma_path = os.path.join(current_dir, chroma_path)
-            
-            collection_name = sentencebert_config.get('collection_name', 'retriever_legal_articles')
-            chroma_index = ChromaIndex(persist_directory=chroma_path, collection_name=collection_name)
-            
-            # Get all doc_ids
-            doc_ids = [doc_id for doc_id, score in retrieved_results]
-            
-            # Get metadata for all doc_ids at once
-            try:
-                doc_data = chroma_index.collection.get(ids=doc_ids)
-                if doc_data and doc_data.get('metadatas'):
-                    metadatas = doc_data['metadatas']
-                    for i, metadata in enumerate(metadatas):
-                        aid = metadata.get('aid', doc_ids[i] if i < len(doc_ids) else '')
-                        retrieved_aids.append(str(aid))
-                else:
-                    # Fallback: use doc_id as aid
-                    retrieved_aids = [str(doc_id) for doc_id, score in retrieved_results]
-            except Exception as e:
-                logger.warning(f"Error getting metadata from ChromaDB: {e}")
-                # Fallback: use doc_id as aid
-                retrieved_aids = [str(doc_id) for doc_id, score in retrieved_results]
-        else:
-            # For BM25, doc_id is already aid
-            retrieved_aids = [str(aid) for aid, score in retrieved_results]
+        # Get documents from reranker ChromaDB
+        filtered_docs = self._get_reranker_documents(retrieved_aids)
         
-        # Step 3: Rerank if reranker is enabled
-        if self.reranker or self.qwen_reranker:
-            # Get documents from reranker ChromaDB for reranking
-            reranker_config = self.config.get('reranker', {})
-            embedder_config = reranker_config.get('embedder', {})
-            pipeline_config = self.config.get('pipeline', {})
-            indexes_config = pipeline_config.get('indexes', {})
-            chroma_path = indexes_config.get('chroma_db_reranker_path', './data/chroma_db_reranker')
-            if not os.path.isabs(chroma_path):
-                chroma_path = os.path.join(current_dir, chroma_path)
-            
-            collection_name = embedder_config.get('collection_name', 'reranker_legal_articles')
-            reranker_chroma = ChromaIndex(persist_directory=chroma_path, collection_name=collection_name)
-            
-            # Query reranker ChromaDB with query to get documents
-            query_embedding = self.embedder.encode(query)
-            if isinstance(query_embedding, list):
-                query_embedding = query_embedding[0]
-            if hasattr(query_embedding, 'tolist'):
-                query_embedding = query_embedding.tolist()
-            
-            # Query reranker ChromaDB to get documents (article-level)
-            reranker_results = reranker_chroma.query(
-                query_embedding=query_embedding,
-                n_results=min(max(len(retrieved_aids), self.retriever_top_k), 100)
-            )
-            
-            if reranker_results and reranker_results.get('documents'):
-                # Format documents for reranker
-                formatted_docs = format_chroma_to_reranker(reranker_results)
-                
-                # Filter to only include documents with aids in retrieved_aids
-                # This ensures we rerank only the documents retrieved by BM25
-                retrieved_aids_set = set(retrieved_aids)
-                filtered_docs = [
-                    doc for doc in formatted_docs 
-                    if str(doc.get('aid', '')) in retrieved_aids_set
-                ]
-                
-                # If no matching documents found, fallback to retrieved aids
-                if not filtered_docs:
-                    logger.warning(f"No matching documents found in reranker ChromaDB for retrieved_aids. Using retrieved_aids directly.")
-                    return retrieved_aids[:self.reranker_top_k] if self.reranker_top_k else retrieved_aids
-                
-                # Rerank with Cross-Encoder
-                if self.reranker:
-                    reranked_results = self.reranker.rerank(query, filtered_docs, top_k=self.reranker_top_k)
-                    # reranked_results is List[Tuple[str, float]] - (aid, score)
-                else:
-                    # If no cross-encoder, create dummy results from filtered_docs
-                    # Only include aids that are in filtered_docs (available in reranker ChromaDB)
-                    # Qwen reranker needs List[Tuple[str, float]] format
-                    filtered_aids_set = {str(doc.get('aid', '')) for doc in filtered_docs}
-                    reranked_results = [
-                        (aid, 1.0) for aid in retrieved_aids[:self.reranker_top_k]
-                        if aid in filtered_aids_set
-                    ]
-                
-                # Apply Qwen reranker if enabled
-                if self.qwen_reranker and reranked_results:
-                    # Build documents_dict for Qwen reranker
-                    # Qwen reranker needs Dict[str, Dict[str, Any]] with aid as key
-                    documents_dict = self.qwen_reranker.build_documents_dict(filtered_docs, id_key="aid")
-                    
-                    # Qwen reranker takes: query, reranker_results (List[Tuple[str, float]]), documents_dict
-                    qwen_results = self.qwen_reranker.rerank(
-                        query, 
-                        reranked_results, 
-                        documents_dict, 
-                        top_k=self.reranker_top_k
-                    )
-                    # Extract aids from Qwen results
-                    final_aids = [str(aid) for aid, score in qwen_results]
-                else:
-                    # No Qwen reranker, use cross-encoder results
-                    final_aids = [str(aid) for aid, score in reranked_results]
-                
-                return final_aids
+        if not filtered_docs:
+            logger.warning("No docs found for reranking, returning retrieval results")
+            return retrieved_aids[:self.reranker_top_k] if self.reranker_top_k else retrieved_aids
+        
+        # Thực hiện Rerank
+        try:
+            if self.reranker:
+                # Cross-Encoder
+                reranked_results = self.reranker.rerank(query, filtered_docs, top_k=self.reranker_top_k)
             else:
-                # Fallback to retrieved aids
-                logger.warning("Reranker ChromaDB query returned no results. Using retrieved_aids directly.")
-                return retrieved_aids[:self.reranker_top_k] if self.reranker_top_k else retrieved_aids
-        else:
-            # No reranker, return retrieved aids
+                # Dummy pass-through
+                reranked_results = [(d['aid'], 1.0) for d in filtered_docs][:self.reranker_top_k]
+            
+            # Qwen Rerank (Chain)
+            if self.qwen_reranker and reranked_results:
+                documents_dict = self.qwen_reranker.build_documents_dict(filtered_docs, id_key="aid")
+                qwen_results = self.qwen_reranker.rerank(
+                    query, reranked_results, documents_dict, top_k=self.reranker_top_k
+                )
+                return [str(aid) for aid, _ in qwen_results]
+            
+            return [str(aid) for aid, _ in reranked_results]
+        
+        except Exception as e:
+            logger.error(f"Reranking failed: {e}")
             return retrieved_aids[:self.reranker_top_k] if self.reranker_top_k else retrieved_aids
 
 
@@ -360,31 +339,25 @@ def main():
     
     logger.info(f"Processing {len(test_data)} queries...")
     
-    # Helper function to convert aids to integers
-    def convert_aids_to_int(aids):
+    def convert_aids_to_int(aids: List[str]) -> List[int]:
         """Convert list of aid strings/ints to integers, filtering out invalid values"""
         result = []
         for aid in aids:
-            try:
-                # If already an int, use it directly
-                if isinstance(aid, int):
-                    result.append(aid)
-                else:
-                    # Try to convert string to int directly
-                    aid_str = str(aid).strip()
-                    try:
-                        result.append(int(aid_str))
-                    except ValueError:
-                        # If direct conversion fails, extract numbers from string
-                        # e.g., "law_1_article_5" -> extract 5
-                        numbers = re.findall(r'\d+', aid_str)
-                        if numbers:
-                            result.append(int(numbers[-1]))
-                        else:
-                            logger.warning(f"Could not extract number from aid: {aid}")
-            except Exception as e:
-                logger.warning(f"Error converting aid to int: {aid}, error: {e}")
+            if isinstance(aid, int):
+                result.append(aid)
                 continue
+            
+            aid_str = str(aid).strip()
+            # Try direct conversion
+            try:
+                result.append(int(aid_str))
+            except ValueError:
+                # Extract numbers from string (e.g., "law_1_article_5" -> extract 5)
+                numbers = re.findall(r'\d+', aid_str)
+                if numbers:
+                    result.append(int(numbers[-1]))
+                else:
+                    logger.warning(f"Could not extract number from aid: {aid}")
         return result
     
     # Process each query

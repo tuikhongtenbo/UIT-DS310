@@ -57,45 +57,59 @@ class DenseRetriever:
             top_k: Number of documents to return.
 
         Returns:
-            List of tuples: (doc_id, score). Score is Cosine Similarity [0, 1].
+            List of tuples: (aid, score). Score is Cosine Similarity [0, 1].
         """
         if not query.strip():
             return []
 
-        # 1. Encode query using the centralized Embedder
+        # 1. Encode query
         try:
             query_embedding = self.embedder.encode(query)
-
-            if isinstance(query_embedding, np.ndarray):
+            if hasattr(query_embedding, 'tolist'):
                 if len(query_embedding.shape) > 1:
                     query_vec = query_embedding[0].tolist()
                 else:
                     query_vec = query_embedding.tolist()
             else:
                 query_vec = query_embedding
-
         except Exception as e:
             logger.error(f"Error encoding query: {e}")
             raise e
 
-        # 2. Query ChromaDB via ChromaIndex
-        results = self.chroma_index.query(query_embedding=query_vec, n_results=top_k)
+        # 2. Query ChromaDB
+        results = self.chroma_index.collection.query(
+            query_embeddings=[query_vec],
+            n_results=top_k,
+            include=["metadatas", "distances"]
+        )
 
-        # 3. Parse Results
         if not results or not results.get('ids') or not results['ids'][0]:
             return []
 
         ids = results['ids'][0]
         distances = results['distances'][0]
+        metadatas = results['metadatas'][0] if results.get('metadatas') else []
 
-        retrieved_items = []
+        # Dùng dict để deduplicate nếu 1 bài có nhiều chunk 
+        retrieved_items = {}
 
         for i, doc_id in enumerate(ids):
             dist = distances[i]
             score = 1.0 - dist
-
             score = max(0.0, min(1.0, score))
 
-            retrieved_items.append((doc_id, float(score)))
+            # Trích xuất AID từ Metadata
+            meta = metadatas[i] if i < len(metadatas) else {}
+            # Ưu tiên lấy 'aid', 'article_id', hoặc fallback về doc_id nếu không có
+            real_id = str(meta.get('aid') or meta.get('article_id') or doc_id)
 
-        return retrieved_items
+            # Nếu 1 bài có nhiều chunk, giữ lại điểm chunk cao nhất
+            if real_id in retrieved_items:
+                if score > retrieved_items[real_id]:
+                    retrieved_items[real_id] = score
+            else:
+                retrieved_items[real_id] = score
+
+        # Chuyển về list tuple và sort
+        sorted_items = sorted(retrieved_items.items(), key=lambda x: x[1], reverse=True)
+        return sorted_items[:top_k]
