@@ -29,8 +29,8 @@ retriever:
       k: 60
     weighted:
       weights:
-        bm25: 0.3
-        sentencebert: 0.5
+        bm25: 0.1
+        sentencebert: 0.9
 
 reranker:
   embedder:
