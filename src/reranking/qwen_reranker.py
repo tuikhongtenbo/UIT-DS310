@@ -155,15 +155,16 @@ class QwenReranker:
         
         # System prompt
         system_prompt = """You are a legal retrieval assistant. Your task is to analyze the user's query and the provided candidate articles.
-                    Identify  articles that is most relevant and directly answers the query.
-                    CRITICAL INSTRUCTION: Output ONLY the Article ID (aid) in JSON format like this: {"aid": "..."}. Do not provide explanations."""
+                    Identify ALL articles that are relevant and directly answer the query. You can select 1, 2, 3, or more articles depending on relevance.
+                    CRITICAL INSTRUCTION: Output ONLY the Article IDs (aids) in JSON format like this: {"aids": ["aid1", "aid2", ...]}. 
+                    If only one article is relevant, return: {"aids": ["aid1"]}. Do not provide explanations."""
         
         user_prompt = f"""Query: {query}
 
 Candidate Articles:
 {context_str}
 
-Which article is the most relevant to the query?"""
+Which articles are relevant to the query? Select all articles that are relevant (can be 1, 2, 3, or more)."""
         
         # Create messages list
         messages = [
@@ -197,12 +198,19 @@ Which article is the most relevant to the query?"""
             skip_special_tokens=True
         ).strip()
         
-        # Parse JSON output
-        selected_aid = None
+        # Parse JSON output - LLM can return multiple articles
+        selected_aids = []
         try:
             # Try to parse JSON directly first
             result = json.loads(generated_text)
-            selected_aid = result.get('aid', '')
+            # Support both new format {"aids": [...]} and old format {"aid": "..."}
+            if 'aids' in result:
+                selected_aids = result.get('aids', [])
+            elif 'aid' in result:
+                # Backward compatibility with old format
+                aid = result.get('aid', '')
+                if aid:
+                    selected_aids = [aid]
         except json.JSONDecodeError:
             # If direct parsing fails, try to extract JSON from text
             try:
@@ -211,26 +219,53 @@ Which article is the most relevant to the query?"""
                 if json_start >= 0 and json_end > json_start:
                     json_str = generated_text[json_start:json_end]
                     result = json.loads(json_str)
-                    selected_aid = result.get('aid', '')
+                    if 'aids' in result:
+                        selected_aids = result.get('aids', [])
+                    elif 'aid' in result:
+                        aid = result.get('aid', '')
+                        if aid:
+                            selected_aids = [aid]
                 else:
-                    # Fallback: try to extract aid from text (e.g., "aid": "art_01")
+                    # Fallback: try to extract aids from text
                     import re
-                    match = re.search(r'"aid"\s*:\s*"([^"]+)"', generated_text)
-                    if match:
-                        selected_aid = match.group(1)
+                    # Try to find array format: ["aid1", "aid2", "aid3"]
+                    array_match = re.search(r'\["([^"]+)"(?:\s*,\s*"([^"]+)")*\]', generated_text)
+                    if array_match:
+                        # Extract all quoted strings in the array
+                        selected_aids = re.findall(r'"([^"]+)"', generated_text[json_start:json_end] if json_start >= 0 else generated_text)
                     else:
-                        selected_aid = generated_text.strip()
+                        # Try single aid format: {"aid": "..."}
+                        match = re.search(r'"aid"\s*:\s*"([^"]+)"', generated_text)
+                        if match:
+                            selected_aids = [match.group(1)]
+                        else:
+                            # Try to find aids array in the JSON-like structure
+                            aids_match = re.search(r'"aids"\s*:\s*\["([^"]+)"(?:\s*,\s*"([^"]+)")*\]', generated_text)
+                            if aids_match:
+                                selected_aids = re.findall(r'"([^"]+)"', aids_match.group(0))
+                            else:
+                                # Last resort: try to extract any quoted strings that look like aids
+                                matches = re.findall(r'"([^"]+)"', generated_text)
+                                if matches:
+                                    selected_aids = matches[:10]  # Limit to 10 aids max
             except Exception:
-                # Last fallback: use raw text
-                selected_aid = generated_text.strip()
+                # Last fallback: try to extract any numbers or strings that might be aids
+                import re
+                # Try to find any quoted strings or numbers
+                matches = re.findall(r'"([^"]+)"', generated_text)
+                if matches:
+                    selected_aids = matches[:5]
         
-        # Return result with proper fallback logic
+        # Filter to only include valid candidate aids and return results
         if not reranker_results:
             return []
         
-        if selected_aid and selected_aid in candidate_aids:
-            # LLM successfully selected a valid candidate
-            return [(selected_aid, 1.0)]
+        valid_aids = [aid for aid in selected_aids if aid in candidate_aids]
+        
+        if valid_aids:
+            # LLM successfully selected valid candidates
+            # Return in order of selection, with score 1.0
+            return [(aid, 1.0) for aid in valid_aids]
         else:
             # Fallback: return highest score article (already sorted by score descending)
             return [reranker_results[0]]

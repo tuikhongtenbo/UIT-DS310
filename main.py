@@ -349,10 +349,11 @@ class ExperimentPipeline:
                     qwen_results = self.qwen_reranker.rerank(
                         query, 
                         qwen_candidates, 
-                        documents_dict, 
-                        top_k=self.reranker_top_k  # Cắt kết quả cuối cùng tại đây
+                        documents_dict
                     )
-                    return [str(aid) for aid, _ in qwen_results]
+                    result_aids = [str(aid) for aid, _ in qwen_results]
+                    # Giới hạn theo reranker_top_k nếu cần 
+                    return result_aids[:self.reranker_top_k] if self.reranker_top_k else result_aids
                 else:
                     logger.warning("No documents found for Qwen reranker, using previous results")
             

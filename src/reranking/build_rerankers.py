@@ -43,10 +43,16 @@ def build_single_reranker(
 def build_ensemble_reranker(
     config: Dict[str, Any],
     device: Optional[str] = None,
-    require_all_models: bool = True
+    require_all_models: bool = False
 ) -> Optional[EnsembleReranker]:
     """
     Build EnsembleReranker from config.
+    
+    Args:
+        config: Configuration dictionary
+        device: Device to use (cuda/cpu)
+        require_all_models: If True, requires all 3 models (gte, bge_v2, jina) to be enabled.
+                          If False, allows ensemble with any number of enabled models (at least 1).
     """
     reranker_config = config.get("reranker", {})
     ensemble_config = reranker_config.get("ensemble", {})
@@ -58,6 +64,7 @@ def build_ensemble_reranker(
     # Get enabled models
     models_config = reranker_config.get("models", {})
     enabled_models = []
+    enabled_keys = []
     required_models = ["gte", "bge_v2", "jina"]
     
     for model_key in required_models:
@@ -66,12 +73,12 @@ def build_ensemble_reranker(
             model_name = model_config.get("model_name")
             if model_name:
                 enabled_models.append(model_name)
+                enabled_keys.append(model_key)
             else:
                 print(f"Warning: {model_key} is enabled but model_name is missing")
     
     # Validate: require all 3 models if require_all_models is True
     if require_all_models and len(enabled_models) < len(required_models):
-        enabled_keys = [k for k in required_models if models_config.get(k, {}).get("enabled", False)]
         missing = [m for m in required_models if m not in enabled_keys]
         raise ValueError(
             f"Ensemble reranker requires all 3 models to be enabled. "
@@ -79,8 +86,14 @@ def build_ensemble_reranker(
             f"Currently enabled: {enabled_keys} ({len(enabled_models)}/{len(required_models)})"
         )
     
+    # Require at least 1 model to be enabled
     if not enabled_models:
+        print("Warning: Ensemble reranker is enabled but no models are enabled. Disabling ensemble.")
         return None
+    
+    # Log which models are being used
+    if len(enabled_models) < len(required_models):
+        print(f"Info: Ensemble reranker using {len(enabled_models)}/{len(required_models)} models: {enabled_keys}")
     
     # Get RRF k parameter
     method = ensemble_config.get("method", "rrf")
