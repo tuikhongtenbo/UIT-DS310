@@ -78,6 +78,7 @@ reranker:
     temperature: 0.1
     threshold: 0.8
     max_content_length: 2048
+    legal_corpus_path: "/kaggle/input/vlqa-dataset/legal_corpus.json"  # Path to legal_corpus.json
 
 pipeline:
   data:

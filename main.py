@@ -36,10 +36,12 @@ class ExperimentPipeline:
         self.retriever = None
         self.reranker = None
         self.qwen_reranker = None
+        self.legal_corpus_dict = {}  # Mapping aid -> content_Article from legal_corpus.json
         
         # Initialize components
         self._init_retriever()
         self._init_reranker()
+        self._load_legal_corpus()
     
     def _init_retriever(self):
         """Initialize retriever based on config"""
@@ -146,6 +148,49 @@ class ExperimentPipeline:
                 logger.info("Qwen reranker initialized")
         
         self.reranker_top_k = reranker_config.get('top_k', 2)
+    
+    def _load_legal_corpus(self):
+        """Load legal_corpus.json and create mapping aid -> content_Article"""
+        # Only load if Qwen reranker is enabled
+        reranker_config = self.config.get('reranker', {})
+        qwen_config = reranker_config.get('qwen', {})
+        if not qwen_config.get('enabled', False):
+            return
+        
+        # Priority: qwen.legal_corpus_path > pipeline.data.legal_corpus_path > default
+        legal_corpus_path = qwen_config.get('legal_corpus_path')
+        if not legal_corpus_path:
+            pipeline_config = self.config.get('pipeline', {})
+            data_config = pipeline_config.get('data', {})
+            legal_corpus_path = data_config.get('legal_corpus_path', './dataset/legal_corpus.json')
+        
+        # Resolve path
+        legal_corpus_path = self._resolve_path(legal_corpus_path)
+        
+        if not os.path.exists(legal_corpus_path):
+            logger.warning(f"Legal corpus not found at {legal_corpus_path}, Qwen reranker will use reranker DB content")
+            return
+        
+        try:
+            logger.info(f"Loading legal corpus from {legal_corpus_path}...")
+            with open(legal_corpus_path, 'r', encoding='utf-8') as f:
+                legal_corpus = json.load(f)
+            
+            # Create mapping aid -> content_Article
+            for law_entry in legal_corpus:
+                content_list = law_entry.get('content', [])
+                for article in content_list:
+                    aid = article.get('aid')
+                    content_article = article.get('content_Article', '')
+                    if aid is not None and content_article:
+                        # Convert aid to string for consistency
+                        aid_str = str(aid)
+                        self.legal_corpus_dict[aid_str] = content_article
+            
+            logger.info(f"Loaded {len(self.legal_corpus_dict)} articles from legal corpus")
+        except Exception as e:
+            logger.error(f"Error loading legal corpus: {e}")
+            logger.warning("Qwen reranker will use reranker DB content")
     
     def _resolve_path(self, path: str) -> str:
         """Resolve absolute or relative path"""
@@ -271,11 +316,41 @@ class ExperimentPipeline:
             
             # Qwen Rerank (Chain)
             if self.qwen_reranker and reranked_results:
-                documents_dict = self.qwen_reranker.build_documents_dict(filtered_docs, id_key="aid")
-                qwen_results = self.qwen_reranker.rerank(
-                    query, reranked_results, documents_dict, top_k=self.reranker_top_k
-                )
-                return [str(aid) for aid, _ in qwen_results]
+                # Get top-10 aids from reranked results (Qwen uses up to 10 internally)
+                # Use min(10, len(reranked_results)) to ensure we pass enough candidates
+                num_candidates = min(10, len(reranked_results))
+                top_aids = [str(aid) for aid, _ in reranked_results[:num_candidates]]
+                
+                # Build documents dict for Qwen using content from legal_corpus.json
+                qwen_docs = []
+                for aid in top_aids:
+                    # Try to get content from legal_corpus.json first
+                    content = self.legal_corpus_dict.get(aid, '')
+                    if not content:
+                        # Fallback: try to find in filtered_docs
+                        for doc in filtered_docs:
+                            if str(doc.get('aid', '')) == aid:
+                                content = doc.get('content', doc.get('text', ''))
+                                break
+                    
+                    if content:
+                        qwen_docs.append({
+                            "aid": aid,
+                            "content": content,
+                            "text": content
+                        })
+                
+                if qwen_docs:
+                    documents_dict = self.qwen_reranker.build_documents_dict(qwen_docs, id_key="aid")
+                    # Pass top candidates to Qwen (up to 10)
+                    qwen_candidates = reranked_results[:num_candidates]
+                    qwen_results = self.qwen_reranker.rerank(
+                        query, qwen_candidates, documents_dict, top_k=self.reranker_top_k
+                    )
+                    return [str(aid) for aid, _ in qwen_results]
+                else:
+                    logger.warning("No documents found for Qwen reranker, using reranked results")
+                    return [str(aid) for aid, _ in reranked_results[:self.reranker_top_k]]
             
             return [str(aid) for aid, _ in reranked_results]
         
