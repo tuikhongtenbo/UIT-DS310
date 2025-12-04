@@ -52,7 +52,7 @@ reranker:
       max_length: 512
 
   ensemble:
-    enabled: true
+    enabled: false
     method: "rrf"
     rrf:
       k: 60

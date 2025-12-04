@@ -373,8 +373,8 @@ def main():
         '--exp', 
         type=int, 
         required=True, 
-        choices=range(1, 10),
-        help='Experiment number (1-9)'
+        choices=range(1, 13),
+        help='Experiment number (1-12)'
     )
     parser.add_argument(
         '--input',

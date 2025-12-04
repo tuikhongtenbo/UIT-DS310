@@ -2,10 +2,22 @@
 Qwen Reranker
 Qwen2.5 model for reranking documents using LLM inference
 """
-from typing import List, Tuple, Dict, Any, Union
+from typing import List, Tuple, Dict, Any, Union, Optional
 import json
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Try to import BitsAndBytesConfig for 4-bit quantization
+try:
+    from transformers import BitsAndBytesConfig
+    BITSANDBYTES_AVAILABLE = True
+except ImportError:
+    BITSANDBYTES_AVAILABLE = False
+    BitsAndBytesConfig = None
+    logger.warning("bitsandbytes not available. 4-bit quantization will be disabled.")
 
 
 class QwenReranker:
@@ -21,7 +33,9 @@ class QwenReranker:
         torch_dtype: torch.dtype = torch.float16,
         max_new_tokens: int = 50,
         temperature: float = 0.1,
-        threshold: float = 0.8
+        threshold: float = 0.8,
+        use_4bit: bool = True,
+        exp_num: Optional[int] = None
     ):
         """
         Initialize Qwen reranker with threshold-based selection.
@@ -34,7 +48,9 @@ class QwenReranker:
         self.max_new_tokens = max_new_tokens
         self.temperature = temperature
         self.threshold = threshold
-        self.max_content_length = 2000  
+        self.max_content_length = 2000
+        self.use_4bit = use_4bit and BITSANDBYTES_AVAILABLE and device == "cuda"
+        self.exp_num = exp_num
         
         # Load tokenizer and model 
         self.tokenizer = None
@@ -47,13 +63,51 @@ class QwenReranker:
             return
         
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        self.model = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-            device_map="auto" if self.device == "cuda" else None
-        )
-        if self.device == "cpu":
-            self.model = self.model.to(self.device)
+        
+        # Use 4-bit quantization if enabled and available
+        if self.use_4bit:
+            logger.info("Loading Qwen model with 4-bit quantization to save VRAM...")
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4"
+            )
+            
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                quantization_config=bnb_config,
+                device_map="auto",
+                trust_remote_code=True
+            )
+            # device_map="auto" handles device placement automatically
+        else:
+            logger.info("Loading Qwen model with full precision...")
+            # Try to load with device_map if accelerate is available
+            try:
+                import accelerate
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                    device_map="auto" if self.device == "cuda" else None,
+                    trust_remote_code=True
+                )
+                if self.device == "cpu":
+                    self.model = self.model.to(self.device)
+            except ImportError:
+                # Fallback: load without device_map
+                logger.warning("accelerate not installed, loading model without device_map")
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                    trust_remote_code=True
+                )
+                # Manually move to device
+                if self.device == "cuda" and torch.cuda.is_available():
+                    self.model = self.model.to(self.device)
+                elif self.device == "cpu":
+                    self.model = self.model.to(self.device)
+        
         self._model_loaded = True
     
     @staticmethod
@@ -153,18 +207,62 @@ class QwenReranker:
             # Fallback: return highest score article if no valid candidates
             return [reranker_results[0]] if reranker_results else []
         
-        # System prompt
-        system_prompt = """You are a legal retrieval assistant. Your task is to analyze the user's query and the provided candidate articles.
-                    Identify ALL articles that are relevant and directly answer the query. You can select 1, 2, 3, or more articles depending on relevance.
-                    CRITICAL INSTRUCTION: Output ONLY the Article IDs (aids) in JSON format like this: {"aids": ["aid1", "aid2", ...]}. 
-                    If only one article is relevant, return: {"aids": ["aid1"]}. Do not provide explanations."""
-        
-        user_prompt = f"""Query: {query}
+        # Select prompts based on experiment number
+        if self.exp_num in [10, 11, 12]:
+            # System prompt for exp_10, 11, 12
+            if self.exp_num == 12:
+                # exp_12: select 1-3 articles
+                system_prompt = """You are a legal retrieval assistant. Your task is to analyze the user's query and the provided candidate articles.
+                            Select the most relevant articles (from 1 to 3 articles) based on relevance.
+                            CRITICAL INSTRUCTION: Output ONLY the Article IDs (aids) in JSON format like this: {"aids": ["aid1", "aid2", ...]}. 
+                            You can select 1, 2, or 3 articles depending on relevance. Do not provide explanations."""
+            else:
+                # exp_10, 11: select exact number
+                system_prompt = """You are a legal retrieval assistant. Your task is to analyze the user's query and the provided candidate articles.
+                            Select the most relevant articles based on the user's specific instruction (top-1 or top-2).
+                            CRITICAL INSTRUCTION: Output ONLY the Article IDs (aids) in JSON format like this: {"aids": ["aid1", "aid2", ...]}. 
+                            Follow the user's instruction exactly for the number of articles to select. Do not provide explanations."""
+            
+            # User prompts for exp_10, 11, 12
+            if self.exp_num == 10:
+                user_prompt = f"""Query: {query}
+
+Candidate Articles:
+{context_str}
+
+Which article is the most relevant to the query? Select only the single most relevant article."""
+            elif self.exp_num == 11:
+                user_prompt = f"""Query: {query}
+
+Candidate Articles:
+{context_str}
+
+Which articles are relevant to the query? Select exactly the top 2 most relevant articles."""
+            elif self.exp_num == 12:
+                user_prompt = f"""Query: {query}
+
+Candidate Articles:
+{context_str}
+
+Which articles are relevant to the query? Select the most relevant articles (from 1 to 3 articles)."""
+        else:
+            # System prompt for exp_7 & exp_9 (default)
+            system_prompt = """You are a legal retrieval assistant. Your task is to analyze the user's query and the provided candidate articles.
+                        Identify ALL articles that are relevant and directly answer the query. You can select 1, 2, 3, or more articles depending on relevance.
+                        CRITICAL INSTRUCTION: Output ONLY the Article IDs (aids) in JSON format like this: {"aids": ["aid1", "aid2", ...]}. 
+                        If only one article is relevant, return: {"aids": ["aid1"]}. Do not provide explanations."""
+            
+            # User prompt for exp_7 & exp_9
+            user_prompt = f"""Query: {query}
 
 Candidate Articles:
 {context_str}
 
 Which articles are relevant to the query? Select all articles that are relevant (can be 1, 2, 3, or more)."""
+        
+        # Log the prompt being sent to Qwen (debug level)
+        logger.debug(f"Qwen system prompt: {system_prompt}")
+        logger.debug(f"Qwen user prompt (truncated): {user_prompt[:500]}...")
         
         # Create messages list
         messages = [
@@ -197,6 +295,9 @@ Which articles are relevant to the query? Select all articles that are relevant 
             outputs[0][inputs.input_ids.shape[1]:], 
             skip_special_tokens=True
         ).strip()
+        
+        # Log raw output from Qwen via logger
+        logger.debug(f"Qwen raw output: {generated_text}")
         
         # Parse JSON output - LLM can return multiple articles
         selected_aids = []

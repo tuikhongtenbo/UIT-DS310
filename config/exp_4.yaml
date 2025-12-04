@@ -38,20 +38,20 @@ reranker:
       batch_size: 16
       max_length: 512
     bge_v2:
-      enabled: true
+      enabled: false
       model_name: "Booooooooooooo/bge-v2-reranker-10e"
       device: "cuda"
       batch_size: 16
       max_length: 512
     jina:
-      enabled: true
+      enabled: false
       model_name: "Booooooooooooo/jina-reranker-10e"
       device: "cuda"
       batch_size: 16
       max_length: 512
 
   ensemble:
-    enabled: true
+    enabled: false
     method: "rrf"
     rrf:
       k: 60

@@ -4,9 +4,12 @@ Helper functions to initialize rerankers from config.yaml
 """
 from typing import Dict, Any, List, Optional
 import yaml
+import logging
 from .single_reranker import SingleReranker
 from .ensemble_reranker import EnsembleReranker
 from .qwen_reranker import QwenReranker
+
+logger = logging.getLogger(__name__)
 
 
 def load_config(config_path: str = "config/config.yaml") -> Dict[str, Any]:
@@ -75,7 +78,7 @@ def build_ensemble_reranker(
                 enabled_models.append(model_name)
                 enabled_keys.append(model_key)
             else:
-                print(f"Warning: {model_key} is enabled but model_name is missing")
+                logger.warning(f"{model_key} is enabled but model_name is missing")
     
     # Validate: require all 3 models if require_all_models is True
     if require_all_models and len(enabled_models) < len(required_models):
@@ -88,12 +91,12 @@ def build_ensemble_reranker(
     
     # Require at least 1 model to be enabled
     if not enabled_models:
-        print("Warning: Ensemble reranker is enabled but no models are enabled. Disabling ensemble.")
+        logger.warning("Ensemble reranker is enabled but no models are enabled. Disabling ensemble.")
         return None
     
     # Log which models are being used
     if len(enabled_models) < len(required_models):
-        print(f"Info: Ensemble reranker using {len(enabled_models)}/{len(required_models)} models: {enabled_keys}")
+        logger.info(f"Ensemble reranker using {len(enabled_models)}/{len(required_models)} models: {enabled_keys}")
     
     # Get RRF k parameter
     method = ensemble_config.get("method", "rrf")
@@ -146,12 +149,18 @@ def build_qwen_reranker(
     device = device or qwen_config.get("device") or reranker_config.get("embedder", {}).get("device")
     
     # Build QwenReranker with config
+    # Default to 4-bit quantization for 16GB GPUs (can be disabled in config)
+    use_4bit = qwen_config.get("use_4bit", True)
+    exp_num = qwen_config.get("exp_num", None)
+    
     qwen = QwenReranker(
         model_name=qwen_config.get("model_name", "Qwen/Qwen2.5-7B-Instruct"),
         device=device,
         threshold=qwen_config.get("threshold", 0.8),
         max_new_tokens=qwen_config.get("max_new_tokens", 50),
-        temperature=qwen_config.get("temperature", 0.1)
+        temperature=qwen_config.get("temperature", 0.1),
+        use_4bit=use_4bit,
+        exp_num=exp_num
     )
     
     # Set max_content_length if specified
@@ -194,7 +203,7 @@ def build_all_rerankers(
                     device
                 )
             except Exception as e:
-                print(f"Warning: Failed to build {model_key} reranker: {e}")
+                logger.warning(f"Failed to build {model_key} reranker: {e}")
                 result["singles"][model_key] = None
     
     return result
