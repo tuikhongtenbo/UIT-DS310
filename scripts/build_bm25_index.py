@@ -74,8 +74,8 @@ def build_bm25_index(data, config):
     logger.info("\nInitializing components...")
     preprocessor = Preprocessor()
     chunker = DocumentChunker(chunk_size=chunk_size, overlap=overlap)
-    embedder = VietnameseEmbedder(model_name=model_name, device=device)
-    bm25_retriever = BM25Retriever(embedder=embedder, k1=k1, b=b)
+    bm25_retriever = BM25Retriever(embedder=None, k1=k1, b=b)
+    logger.info("BM25: Using Vietnamese word tokenization (no embedder needed)")
     
     # 3. Process data & Create chunks
     all_chunks = []

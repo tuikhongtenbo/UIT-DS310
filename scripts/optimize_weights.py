@@ -98,7 +98,7 @@ def run_grid_search():
     embedder = VietnameseEmbedder()
 
     logger.info("Building BM25 Index...")
-    bm25 = BM25Retriever(embedder=embedder)
+    bm25 = BM25Retriever(embedder=None)
     bm25.fit(chunks)
 
     logger.info("Building Dense Index (ChromaDB)...")

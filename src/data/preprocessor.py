@@ -7,7 +7,7 @@ import sys
 import os
 import json
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from src.utils.text_utils import normalize_text
+from src.utils.text_utils import normalize_text, preprocess_for_bm25, tokenize_vietnamese
 from src.utils.logger import setup_logger
 
 logger = setup_logger("preprocessor")
@@ -49,6 +49,35 @@ class Preprocessor:
             Preprocessed document text
         """
         return self.preprocess(document)
+    
+    def preprocess_for_bm25(self, document: str) -> str:
+        """
+        Preprocess document text specifically for BM25 indexing.
+        Applies: lowercase, remove punctuation, normalize unicode.
+
+        Args:
+            document: Raw document text
+
+        Returns:
+            Preprocessed text ready for BM25 tokenization
+        """
+        if not document:
+            return ""
+        return preprocess_for_bm25(document)
+    
+    def tokenize_for_bm25(self, document: str) -> list:
+        """
+        Tokenize document for BM25 using Vietnamese word tokenization.
+
+        Args:
+            document: Raw or preprocessed document text
+
+        Returns:
+            List of word tokens
+        """
+        if not document:
+            return []
+        return tokenize_vietnamese(document)
 
 if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))

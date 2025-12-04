@@ -2,7 +2,6 @@
 """
 BM25 Retriever (Optimized with Inverted Index)
 Statistical retrieval using BM25 algorithm.
-Uses tokenizer directly from the Embedding Model for consistency.
 """
 import math
 import os
@@ -10,12 +9,14 @@ import pickle
 from collections import Counter, defaultdict
 from typing import List, Tuple, Dict, Any, Optional
 from src.utils.logger import setup_logger
+from src.utils.text_utils import tokenize_vietnamese
 
 logger = setup_logger("bm25_retriever")
 
 class BM25Retriever:
     """
     BM25-based retriever optimized with Inverted Index.
+    Uses Vietnamese word tokenization for proper BM25 scoring.
     """
 
     def __init__(self, embedder: Any = None, k1: float = 1.5, b: float = 0.75):
@@ -23,8 +24,8 @@ class BM25Retriever:
         Initialize BM25 Retriever.
 
         Args:
-            embedder: Instance of VietnameseEmbedder.
-                      The retriever will attempt to use `embedder.model.tokenizer.tokenize`.
+            embedder: DEPRECATED - No longer used. Kept for backward compatibility.
+                      BM25 now uses Vietnamese word tokenization instead of BERT tokenizer.
             k1: BM25 k1 parameter (term frequency saturation).
             b: BM25 b parameter (length normalization).
         """
@@ -40,35 +41,14 @@ class BM25Retriever:
         self.inverted_index = defaultdict(dict)
         self.idf = {}
 
-        self.tokenizer = None
-
-        if embedder:
-            try:
-
-                if hasattr(embedder, 'model'):
-                    st_model = embedder.model
-
-                    if hasattr(st_model, '_first_module'):
-                        first_module = st_model._first_module()
-                        if hasattr(first_module, 'tokenizer') and hasattr(first_module.tokenizer, 'tokenize'):
-                            self.tokenizer = first_module.tokenizer.tokenize
-                            logger.info("BM25: Đã lấy được tokenizer từ embedder.model._first_module()")
-
-                    if self.tokenizer is None and hasattr(st_model, 'tokenizer'):
-                         if hasattr(st_model.tokenizer, 'tokenize'):
-                            self.tokenizer = st_model.tokenizer.tokenize
-                            logger.info("BM25: Đã lấy được tokenizer từ embedder.model.tokenizer")
-
-                if self.tokenizer is None and hasattr(embedder, 'tokenize'):
-                    self.tokenizer = embedder.tokenize
-                    logger.info("BM25: Đã lấy hàm tokenize() trực tiếp từ Class Embedder")
-
-            except Exception as e:
-                logger.warning(f"BM25: Lỗi khi trích xuất tokenizer: {e}")
-
-        if self.tokenizer is None:
-            logger.warning("BM25: Không tìm thấy Tokenizer trong Embedder. Đang dùng tách khoảng trắng (Hiệu quả thấp với tiếng Việt).")
-            self.tokenizer = lambda x: x.lower().split()
+        # Use Vietnamese word tokenization instead of BERT tokenizer
+        # This is critical for BM25 to work properly with Vietnamese text
+        self.tokenizer = tokenize_vietnamese
+        
+        if embedder is not None:
+            logger.warning("BM25: embedder parameter is deprecated. BM25 now uses Vietnamese word tokenization (pyvi) instead of BERT tokenizer.")
+        
+        logger.info("BM25: Using Vietnamese word tokenization for proper BM25 scoring.")
 
     def _calc_idf(self, doc_freq_count: Dict[str, int]):
         """Calculate IDF for all terms."""

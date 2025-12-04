@@ -66,7 +66,7 @@ class ExperimentPipeline:
         if bm25_config.get('enabled', False):
             logger.info("Initializing BM25 retriever...")
             bm25_retriever = BM25Retriever(
-                embedder=self.embedder,
+                embedder=None,
                 k1=bm25_config.get('k1', 1.5),
                 b=bm25_config.get('b', 0.75)
             )
