@@ -1,0 +1,5 @@
+Dataset,Total (rows),Max (words),Min (words),Avg (words)
+Train (Articles),59635,55097,0,303.24
+Train (Questions),2190,45,6,19.71
+Public Test (Questions),312,42,11,20.0
+Private Test (Questions),627,44,11,19.9
