@@ -1,14 +1,17 @@
 # Core dependencies
-torch>=2.0.0
-transformers>=4.30.0
+--index-url https://download.pytorch.org/whl/cu129
+torch>=2.7.0
+torchvision
+torchaudio
+transformers>=4.40.0
 sentence-transformers>=2.2.0
 chromadb>=0.4.0
-numpy>=1.24.0
+numpy>=1.24.0,<2.0.0
 pandas>=2.0.0
 pyyaml>=6.0
-tqdm>=4.65.0
-pytest>=7.0.0
-pytest-cov>=4.0.0
-accelerate>=0.20.0
-bitsandbytes>=0.40.0
+tqdm
+accelerate>=0.27.0
+bitsandbytes>=0.43.0
 pyvi>=0.1.1
+--extra-index-url https://download.pytorch.org/whl/cu129
+vllm>=0.9.0

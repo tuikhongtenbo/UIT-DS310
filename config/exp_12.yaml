@@ -1,4 +1,4 @@
-# Experiment 7: Ensemble Retriever + Reranker, Top-k=50, BM25+BGE-M3 + Cross-Encoder + LLM
+# Experiment 12: Ensemble Retriever + Reranker, Top-k=50, BM25+BGE-M3 + Cross-Encoder + LLM (top-3)
 retriever:
   embedder:
     model: "AITeamVN/Vietnamese_Embedding"
@@ -80,6 +80,7 @@ reranker:
     max_content_length: 4096
     use_4bit: true  # Use 4-bit quantization to save VRAM (recommended for 16GB GPUs)
     legal_corpus_path: "./dataset/legal_corpus.json"  # Path to legal_corpus.json
+    exp_num: 12  # Experiment number for prompt selection
 
 pipeline:
   data:

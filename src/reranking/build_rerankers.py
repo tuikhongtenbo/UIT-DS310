@@ -2,12 +2,15 @@
 Build Rerankers from Config
 Helper functions to initialize rerankers from config.yaml
 """
-from typing import Dict, Any, List, Optional
-import yaml
+
 import logging
-from .single_reranker import SingleReranker
+from typing import Any, Dict, Optional
+
+import yaml
+
 from .ensemble_reranker import EnsembleReranker
 from .qwen_reranker import QwenReranker
+from .single_reranker import SingleReranker
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +59,9 @@ def build_ensemble_reranker(
         device: Device to use (cuda/cpu)
         require_all_models: If True, requires all 3 models (gte, bge_v2, jina) to be enabled.
                           If False, allows ensemble with any number of enabled models (at least 1).
+    
+    Returns:
+        Initialized EnsembleReranker instance or None if disabled
     """
     reranker_config = config.get("reranker", {})
     ensemble_config = reranker_config.get("ensemble", {})
@@ -131,10 +137,7 @@ def build_ensemble_reranker(
     )
 
 
-def build_qwen_reranker(
-    config: Dict[str, Any],
-    device: Optional[str] = None
-) -> Optional[QwenReranker]:
+def build_qwen_reranker(config: Dict[str, Any], device: Optional[str] = None) -> Optional[QwenReranker]:
     """
     Build QwenReranker from config (if enabled).
     """
@@ -149,7 +152,6 @@ def build_qwen_reranker(
     device = device or qwen_config.get("device") or reranker_config.get("embedder", {}).get("device")
     
     # Build QwenReranker with config
-    # Default to 4-bit quantization for 16GB GPUs (can be disabled in config)
     use_4bit = qwen_config.get("use_4bit", True)
     exp_num = qwen_config.get("exp_num", None)
     
@@ -170,10 +172,7 @@ def build_qwen_reranker(
     return qwen
 
 
-def build_all_rerankers(
-    config_path: str = "config/config.yaml",
-    device: Optional[str] = None
-) -> Dict[str, Any]:
+def build_all_rerankers(config_path: str = "config/config.yaml", device: Optional[str] = None) -> Dict[str, Any]:
     """
     Build all rerankers from config file.
     """
@@ -193,7 +192,7 @@ def build_all_rerankers(
     # Build QwenReranker if enabled
     result["qwen"] = build_qwen_reranker(config, device)
     
-    # Build individual rerankers 
+    # Build individual rerankers
     for model_key in ["gte", "bge_v2", "jina"]:
         model_config = models_config.get(model_key, {})
         if model_config.get("enabled", False):
@@ -209,18 +208,15 @@ def build_all_rerankers(
     return result
 
 
-def get_reranker(
-    config_path: str = "config/config.yaml",
-    device: Optional[str] = None
-) -> EnsembleReranker:
+def get_reranker(config_path: str = "config/config.yaml", device: Optional[str] = None) -> EnsembleReranker:
     """
     Get ensemble reranker (always 3 models: GTE, BGE-v2, Jina).
     """
     config = load_config(config_path)
     ensemble = build_ensemble_reranker(
-        config, 
-        device=device, 
-        require_all_models=True  
+        config,
+        device=device,
+        require_all_models=True
     )
     
     if ensemble is None:

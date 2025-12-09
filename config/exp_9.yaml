@@ -17,7 +17,7 @@ retriever:
     sentencebert:
       enabled: true
       model: "AITeamVN/Vietnamese_Embedding"
-      chroma_db_path: "/kaggle/input/chroma-db-retriever/chroma_db_retriever"
+      chroma_db_path: "./data/chroma_db_retriever"
       collection_name: "retriever_legal_articles"
 
   mode: "ensemble"
@@ -29,8 +29,8 @@ retriever:
       k: 60
     weighted:
       weights:
-        bm25: 0.1
-        sentencebert: 0.9
+        bm25: 0.3
+        sentencebert: 0.7
 
 reranker:
   embedder:
@@ -39,7 +39,7 @@ reranker:
     overlap: 128
     device: "cuda"
     batch_size: 32
-    chroma_db_path: "/kaggle/input/chroma-db-reranker/chroma_db_reranker"
+    chroma_db_path: "./data/chroma_db_reranker"
     collection_name: "reranker_legal_articles"
 
   models:
@@ -50,7 +50,7 @@ reranker:
       batch_size: 16
       max_length: 512
     bge_v2:
-      enabled: true
+      enabled: false
       model_name: "Booooooooooooo/bge-v2-reranker-10e"
       device: "cuda"
       batch_size: 16
@@ -63,12 +63,12 @@ reranker:
       max_length: 512
 
   ensemble:
-    enabled: true
+    enabled: false
     method: "rrf"
     rrf:
       k: 60
 
-  top_k: 10
+  top_k: 20
 
   qwen:
     enabled: true
@@ -77,18 +77,19 @@ reranker:
     max_new_tokens: 50
     temperature: 0.1
     threshold: 0.8
-    max_content_length: 2048
-    legal_corpus_path: "/kaggle/input/vlqa-dataset/legal_corpus.json"  # Path to legal_corpus.json 
+    max_content_length: 4096
+    use_4bit: true  # Use 4-bit quantization to save VRAM (recommended for 16GB GPUs)
+    legal_corpus_path: "./dataset/legal_corpus.json"  # Path to legal_corpus.json
 
 pipeline:
   data:
-    legal_corpus_path: "/kaggle/input/vlqa-dataset/legal_corpus.json"
-    test_path: "/kaggle/input/test-vlqa/public_test.json"
+    legal_corpus_path: "./dataset/legal_corpus.json"
+    test_path: "./dataset/public_test.json"
 
   indexes:
-    chroma_db_retriever_path: "/kaggle/input/chroma-db-retriever/chroma_db_retriever"
-    chroma_db_reranker_path: "/kaggle/input/chroma-db-reranker/chroma_db_reranker"
-    bm25_index_path: "/kaggle/input/bm25-index/bm25_index.pkl"
+    chroma_db_retriever_path: "./data/chroma_db_retriever"
+    chroma_db_reranker_path: "./data/chroma_db_reranker"
+    bm25_index_path: "./data/bm25_index.pkl"
     tfidf_index_path: "./data/tfidf_index.pkl"
 
 system:

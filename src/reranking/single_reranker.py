@@ -1,27 +1,32 @@
 """
 Single Reranker Module
-Generic reranker using transformers models for sequence classification
+
+Generic reranker using transformers models for sequence classification.
+Supports models like BAAI/bge-reranker-v2-m3, Alibaba-NLP/gte-multilingual-reranker-base,
+jinaai/jina-reranker-v2-base-multilingual rerankers.
 """
-from typing import List, Tuple, Union, Dict, Any
+
+from typing import Any, Dict, List, Tuple, Union
+
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
 from ..utils.format_reranker_input import (
-    format_documents_for_reranker,
+    extract_ids_from_documents,
     extract_texts_from_documents,
-    extract_ids_from_documents
+    format_documents_for_reranker
 )
 
 
 class SingleReranker:
     """
     Single reranker model using transformers sequence classification models.
-    Supports models like BAAI/bge-reranker-v2-m3, Alibaba-NLP/gte-multilingual-reranker-base, jinaai/jina-reranker-v2-base-multilingual rerankers.
     """
     
     def __init__(
-        self, 
-        model_name: str, 
-        device: str = None, 
+        self,
+        model_name: str,
+        device: str = None,
         trust_remote_code: bool = True,
         max_length: int = 512
     ):
@@ -48,9 +53,9 @@ class SingleReranker:
         self.model.eval()
     
     def rerank(
-        self, 
-        query: str, 
-        documents: Union[List[str], List[Dict[str, Any]]], 
+        self,
+        query: str,
+        documents: Union[List[str], List[Dict[str, Any]]],
         top_k: int = None
     ) -> List[Tuple[Union[int, str], float]]:
         """
@@ -69,7 +74,7 @@ class SingleReranker:
         if not documents:
             return []
         
-        # Format documents 
+        # Format documents
         formatted_docs = format_documents_for_reranker(documents)
         
         # Extract texts for scoring

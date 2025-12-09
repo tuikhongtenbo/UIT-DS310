@@ -2,7 +2,8 @@
 Format Reranker Input Module
 Adapter to convert ChromaDB output (column-based) to Reranker input (row-based)
 """
-from typing import List, Dict, Any, Union
+
+from typing import Any, Dict, List, Union, Optional
 
 
 def format_chroma_to_reranker(chroma_results: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -29,14 +30,14 @@ def format_chroma_to_reranker(chroma_results: Dict[str, Any]) -> List[Dict[str, 
     for idx in range(len(doc_list)):
         doc_dict = {
             "content": doc_list[idx],
-            "text": doc_list[idx] 
+            "text": doc_list[idx]
         }
         
         # Add metadata (aid, law_id, etc.)
         if idx < len(meta_list) and meta_list[idx]:
             meta = meta_list[idx]
             if isinstance(meta, dict):
-                doc_dict.update(meta) 
+                doc_dict.update(meta)
         
         # Add ChromaDB ID if available
         if idx < len(id_list):
@@ -53,7 +54,7 @@ def format_chroma_to_reranker(chroma_results: Dict[str, Any]) -> List[Dict[str, 
 
 def format_documents_for_reranker(
     documents: Union[List[str], List[Dict[str, Any]]],
-    metadatas: List[Dict[str, Any]] = None
+    metadatas: Optional[List[Dict[str, Any]]] = None
 ) -> List[Dict[str, Any]]:
     """
     Format documents for reranker input.
@@ -79,7 +80,7 @@ def format_documents_for_reranker(
                 "content": doc.get("content", doc.get("text", "")),
                 "text": doc.get("text", doc.get("content", ""))
             }
-            # Copy all other fields 
+            # Copy all other fields
             for key, value in doc.items():
                 if key not in ["content", "text"]:
                     formatted_doc[key] = value

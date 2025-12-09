@@ -3,22 +3,24 @@
 Logger Module
 Logging utilities
 """
+
 import logging
 import sys
+from typing import Optional
 
-def setup_logger(name: str = "uit_ds310", level: str = "INFO"):
+
+def setup_logger(name: str = "uit_ds310", level: str = "INFO") -> logging.Logger:
     """
     Setup logger for the project.
 
     Args:
         name: Logger name
-        level: Logging level
+        level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 
     Returns:
         Logger instance
     """
     logger = logging.getLogger(name)
-
     log_level = getattr(logging, level.upper(), logging.INFO)
     logger.setLevel(log_level)
 
@@ -32,7 +34,9 @@ def setup_logger(name: str = "uit_ds310", level: str = "INFO"):
         )
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
+    
     return logger
+
 
 if __name__ == "__main__":
     log = setup_logger(level="DEBUG")

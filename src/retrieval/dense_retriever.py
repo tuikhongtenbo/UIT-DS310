@@ -1,10 +1,13 @@
 # src/retrieval/dense_retriever.py
 """
 Dense Retriever Module
+
 Semantic retrieval using VietnameseEmbedder and ChromaIndex.
 Wrapper class to connect Embedding model and Database.
 """
-from typing import List, Tuple, Dict, Any, Optional
+
+from typing import Any, Dict, List, Tuple
+
 import numpy as np
 
 from src.embeddings.chroma_index import ChromaIndex
@@ -13,26 +16,17 @@ from src.utils.logger import setup_logger
 
 logger = setup_logger("dense_retriever")
 
+
 class DenseRetriever:
     """
     Dense Retriever wrapper.
     Uses VietnameseEmbedder for encoding queries and ChromaIndex for retrieval.
     """
 
-    def __init__(
-        self,
-        chroma_index: ChromaIndex,
-        embedder: VietnameseEmbedder
-    ):
+    def __init__(self, chroma_index: ChromaIndex, embedder: VietnameseEmbedder):
         """
         Initialize the DenseRetriever.
-
-        Args:
-            chroma_index: Instance of ChromaIndex (already initialized with DB path).
-            embedder: Instance of VietnameseEmbedder (already loaded model).
         """
-
-
         self.chroma_index = chroma_index
         self.embedder = embedder
         logger.info("DenseRetriever initialized with provided ChromaIndex and Embedder.")
@@ -90,7 +84,7 @@ class DenseRetriever:
         distances = results['distances'][0]
         metadatas = results['metadatas'][0] if results.get('metadatas') else []
 
-        # Dùng dict để deduplicate nếu 1 bài có nhiều chunk 
+        # Use dict to deduplicate if 1 article has multiple chunks
         retrieved_items = {}
 
         for i, doc_id in enumerate(ids):
@@ -98,12 +92,12 @@ class DenseRetriever:
             score = 1.0 - dist
             score = max(0.0, min(1.0, score))
 
-            # Trích xuất AID từ Metadata
+            # Extract AID from Metadata
             meta = metadatas[i] if i < len(metadatas) else {}
-            # Ưu tiên lấy 'aid', 'article_id', hoặc fallback về doc_id nếu không có
+            # Priority: 'aid', 'article_id', or fallback to doc_id
             real_id = str(meta.get('aid') or meta.get('article_id') or doc_id)
 
-            # Nếu 1 bài có nhiều chunk, giữ lại điểm chunk cao nhất
+            # If 1 article has multiple chunks, keep the highest score chunk
             if real_id in retrieved_items:
                 if score > retrieved_items[real_id]:
                     retrieved_items[real_id] = score

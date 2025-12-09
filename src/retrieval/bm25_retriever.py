@@ -3,15 +3,18 @@
 BM25 Retriever (Optimized with Inverted Index)
 Statistical retrieval using BM25 algorithm.
 """
+
 import math
 import os
 import pickle
 from collections import Counter, defaultdict
-from typing import List, Tuple, Dict, Any, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
 from src.utils.logger import setup_logger
 from src.utils.text_utils import tokenize_vietnamese
 
 logger = setup_logger("bm25_retriever")
+
 
 class BM25Retriever:
     """
@@ -60,7 +63,7 @@ class BM25Retriever:
             idf_dict[term] = idf_score
         return idf_dict
 
-    def fit(self, documents: List[Dict[str, Any]]):
+    def fit(self, documents: List[Dict[str, Any]]) -> None:
         """
         Build BM25 index from list of chunks.
 
@@ -87,16 +90,16 @@ class BM25Retriever:
 
         for idx, doc in enumerate(documents):
             # 1. Resolve ID
-            d_id = str(doc.get('id',
-                        doc.get('metadata', {}).get('doc_id',
-                        doc.get('aid', str(idx)))))
+            d_id = str(doc.get(
+                'id',
+                doc.get('metadata', {}).get('doc_id', doc.get('aid', str(idx)))
+            ))
 
             self.doc_ids.append(d_id)
             self.index_to_id[idx] = d_id
 
             # 2. Tokenize Text using the configured tokenizer
             text_content = doc.get('text', doc.get('content_Article', ''))
-
             tokens = self.tokenizer(text_content)
 
             length = len(tokens)
@@ -105,7 +108,6 @@ class BM25Retriever:
 
             # 3. Build Inverted Index
             term_counts = Counter(tokens)
-
             global_term_doc_count.update(term_counts.keys())
 
             for term, count in term_counts.items():

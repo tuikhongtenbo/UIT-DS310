@@ -41,7 +41,7 @@ retriever:
     weighted:
       weights:
         bm25: 0.3
-        sentencebert: 0.5
+        sentencebert: 0.7
 
 # Reranker Module Configuration
 reranker:

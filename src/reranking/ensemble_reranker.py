@@ -2,7 +2,9 @@
 Ensemble Reranker Module
 Combine multiple rerankers using Reciprocal Rank Fusion (RRF)
 """
-from typing import List, Tuple, Union, Dict, Any
+
+from typing import Any, Dict, List, Tuple, Union
+
 from ..fusion.rrf import reciprocal_rank_fusion
 from .single_reranker import SingleReranker
 
@@ -11,9 +13,10 @@ class EnsembleReranker:
     """
     Ensemble reranker that combines multiple rerankers using RRF.
     """
+    
     def __init__(
-        self, 
-        reranker_models: List[Union[str, SingleReranker]], 
+        self,
+        reranker_models: List[Union[str, SingleReranker]],
         rrf_k: int = 60,
         trust_remote_code: bool = True,
         model_configs: Dict[str, Dict[str, Any]] = None
@@ -42,9 +45,9 @@ class EnsembleReranker:
                 raise ValueError(f"Unsupported reranker type: {type(model)}")
     
     def rerank(
-        self, 
-        query: str, 
-        documents: Union[List[str], List[Dict[str, Any]]], 
+        self,
+        query: str,
+        documents: Union[List[str], List[Dict[str, Any]]],
         top_k: int = None
     ) -> List[Tuple[Union[int, str], float]]:
         """
@@ -53,7 +56,7 @@ class EnsembleReranker:
         Args:
             query: Search query
             documents: List of document texts (str) or dicts with 'content'/'text' and 'aid'/'id'
-            top_k: Number of top results to return 
+            top_k: Number of top results to return
         
         Returns:
             List of (document_id, rrf_score) tuples sorted by RRF score
@@ -63,7 +66,7 @@ class EnsembleReranker:
         if not documents or not self.rerankers:
             return []
         
-        # SingleReranker now handles both str and dict formats and returns (id, score)
+        # SingleReranker handles both str and dict formats and returns (id, score)
         ranked_lists = []
         for reranker in self.rerankers:
             # Rerank documents - SingleReranker will handle format conversion

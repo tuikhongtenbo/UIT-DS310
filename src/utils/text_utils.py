@@ -1,17 +1,20 @@
 # src/utils/text_utils.py
 """
 Text Utilities Module
-Text processing and normalization utilities
+
+Text processing and normalization utilities for Vietnamese text.
 """
+
 import re
 import unicodedata
 from typing import List
 
 from pyvi import ViTokenizer
 
+
 def normalize_text(text: str) -> str:
     """
-    Normalize Vietnamese text.
+    Normalize Vietnamese text by cleaning whitespace.
 
     Args:
         text: Input text
@@ -23,6 +26,7 @@ def normalize_text(text: str) -> str:
         return ""
     cleaned_text = re.sub(r'\s+', ' ', text)
     return cleaned_text.strip()
+
 
 def preprocess_for_bm25(sentence: str) -> str:
     """
@@ -56,10 +60,11 @@ def preprocess_for_bm25(sentence: str) -> str:
     
     return sentence
 
+
 def tokenize_vietnamese(text: str) -> List[str]:
     """
     Tokenize Vietnamese text into words.
-    Uses pyvi if available, otherwise falls back to whitespace splitting.
+    Uses pyvi for Vietnamese word tokenization.
     
     Args:
         text: Input text (should be preprocessed)
@@ -78,6 +83,7 @@ def tokenize_vietnamese(text: str) -> List[str]:
     # Use pyvi for Vietnamese word tokenization
     tokens = ViTokenizer.tokenize(text).split()
     return tokens
+
 
 if __name__ == "__main__":
     raw_text = """Điều 1.   Phạm vi điều chỉnh\n\nLuật này quy định về:\t
