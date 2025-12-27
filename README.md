@@ -168,6 +168,13 @@ The reranking stage uses two layers:
   - Larger model with better context understanding
   - Applied when higher precision is required or when Qwen3-4B outputs uncertain rankings
 
+**Inference:**
+- **vLLM**: Used for efficient LLM inference with continuous batching
+- **GPU Hardware**: 
+  - A4000 (gpu renting)
+  - P100 (Kaggle)
+  - T4x2 (Kaggle)
+
 **Configuration:**
 - Temperature: 0.1 (for stable output)
 - Max new tokens: 50
