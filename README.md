@@ -72,7 +72,7 @@ Ensure the following files are available:
 [Stage 1: Retrieval]
     ├─ BM25 (Lexical Retrieval)
     ├─ BGE-M3 (Dense Retrieval)
-    └─ Weighted Ensemble Fusion (W1 × BM25 + W2 × BGE-M3)
+    └─ Weighted Score Fusion (W1 × BM25 + W2 × BGE-M3)
     ↓
 [Top-k Candidates: 200]
     ↓
@@ -82,7 +82,7 @@ Ensure the following files are available:
     │   ├─ BGE-V2 Reranker
     │   └─ RRF Fusion
     ↓
-[Top-k Candidates: 20-30]
+[Top-k Candidates: 20]
     ↓
 [LLM Reranker]
     ├─ Qwen/Qwen3-4B-Instruct-2507 (Main)
@@ -120,7 +120,7 @@ The retrieval stage uses a hybrid approach combining two methods:
 
 ### Grid Search Results
 
-Grid search was performed on the training set to optimize weights W1 (BM25) and W2 (BGE-M3):
+Grid search was performed on the training set (using public training questions only, no test leakage) to optimize weights W1 (BM25) and W2 (BGE-M3):
 
 ![Grid Search Results for W1 and W2](path/to/grid_search_results.png)
 
@@ -154,7 +154,7 @@ The reranking stage uses two layers:
 - Chunking with `chunk_size=2048`, `overlap=128` for reranker
 - Documents stored in ChromaDB with collection `reranker_legal_articles`
 
-**Top-k after Cross-Encoder:** 20-30 candidates selected for LLM reranker
+**Top-k after Cross-Encoder:** 20 candidates selected for LLM reranker
 
 ### LLM Reranker
 
@@ -164,9 +164,9 @@ The reranking stage uses two layers:
   - Achieves high recall on test set
 
 **Fallback Model:**
-- **Qwen/Qwen2.5-7B-Instruct**: Used when Qwen3-4B has relatively high recall
+- **Qwen/Qwen2.5-7B-Instruct**: Used to improve precision in difficult or ambiguous queries
   - Larger model with better context understanding
-  - Used to improve precision when necessary
+  - Applied when higher precision is required or when Qwen3-4B outputs uncertain rankings
 
 **Configuration:**
 - Temperature: 0.1 (for stable output)
@@ -207,8 +207,8 @@ The reranking stage uses two layers:
 
 Evaluation results table for different configurations:
 
-| Subset | Lexical | Dense | Top-k Retrieval | Reranker | Top-k Rerank | F2-Macro | Precision | Recall |
-|--------|---------|-------|-----------------|----------|--------------|----------|-----------|--------|
+| LLM Output | Lexical | Dense | Top-k Retrieval | Reranker | Top-k Rerank | F2-Macro | Precision | Recall |
+|-------------------|---------|-------|-----------------|----------|--------------|----------|-----------|--------|
 | 1 | BM25 | BGE-M3 | 200 | Cross-Enc + LLM | 20 | 0.4523 | 0.5072 | 0.4404 |
 | 2 | BM25 | BGE-M3 | 200 | Cross-Enc + LLM | 20 | 0.4921 | 0.3317 | 0.5597 |
 | 1–3 | BM25 | BGE-M3 | 200 | Cross-Enc + LLM | 20 | 0.5691 | **0.4702** | 0.6007 |
