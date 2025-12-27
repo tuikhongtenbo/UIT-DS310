@@ -181,9 +181,21 @@ The reranking stage uses two layers:
 
 ### Stage-wise Results on Private Test
 
-![Stage Results on Private Test](path/to/stage_results_private_test.png)
+#### Retrieval Stage Results (P@200, R@200)
 
-*Evaluation results for each stage on private test set*
+| Method | P@200 | R@200 |
+|--------|-------|-------|
+| BM25 | 0.0067 | 0.8972 |
+| BGE-M3 | 0.0074 | 0.9693 |
+| Hybrid | 0.0063 | 0.9698 |
+
+#### Reranking Stage Results (P@20, R@20)
+
+| Method | P@20 | R@20 |
+|--------|------|------|
+| GTE | 0.0494 | 0.793 |
+| BGE-V2 | 0.0463 | 0.7514 |
+| RRF | 0.053 | 0.8532 |
 
 ### Full Pipeline Results on Private Test
 
@@ -205,9 +217,14 @@ Evaluation results table for different configurations:
 | 6 | Hybrid | GTE | 1 | 0.5342 | 0.314 | 0.6477 |
 | 7 | Hybrid | GTE + Qwen | 1 | 0.5783 | 0.3344 | 0.7073 |
 
-**LLM Fallback Results:**
-- Config 6 (Free-answer): F2-MACRO = 0.632, Precision = 0.4872, Recall = 0.6826
-- Config 3: F2-MACRO = 0.6312, Precision = 0.509, Recall = 0.6714
+### LLM Fallback Results
+
+Results when using Qwen/Qwen2.5-7B-Instruct as fallback model:
+
+| Config | F2-MACRO | Precision | Recall |
+|--------|----------|-----------|--------|
+| 6 (Free-answer) | 0.632 | 0.4872 | 0.6826 |
+| 3 | 0.6312 | 0.509 | 0.6714 |
 
 ## Usage
 
