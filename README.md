@@ -207,15 +207,15 @@ The reranking stage uses two layers:
 
 Evaluation results table for different configurations:
 
-| Config | Retriever | Reranker | Top-k | F2-MACRO | Precision | Recall |
-|--------|-----------|----------|-------|----------|-----------|--------|
-| 1 | BM25 | - | 1 | 0.4523 | 0.5072 | 0.4404 |
-| 2 | BGE-M3 | - | 1 | 0.4921 | 0.3317 | 0.5597 |
-| 3 | Hybrid | - | 1 | 0.5691 | **0.4702** | 0.6007 |
-| 4 | BM25 | GTE | 1 | 0.5523 | 0.2764 | **0.7359** |
-| 5 | BGE-M3 | GTE | 1 | 0.5769 | **0.4027** | 0.6468 |
-| 6 | Hybrid | GTE | 1 | 0.5342 | 0.314 | 0.6477 |
-| 7 | Hybrid | GTE + Qwen | 1 | 0.5783 | 0.3344 | 0.7073 |
+| Subset | Lexical | Dense | Top-k Retrieval | Reranker | Top-k Rerank | F2-Macro | Precision | Recall |
+|--------|---------|-------|-----------------|----------|--------------|----------|-----------|--------|
+| 1 | BM25 | BGE-M3 | 200 | Cross-Enc + LLM | 20 | 0.4523 | 0.5072 | 0.4404 |
+| 2 | BM25 | BGE-M3 | 200 | Cross-Enc + LLM | 20 | 0.4921 | 0.3317 | 0.5597 |
+| 1–3 | BM25 | BGE-M3 | 200 | Cross-Enc + LLM | 20 | 0.5691 | **0.4702** | 0.6007 |
+| 4 | BM25 | BGE-M3 | 200 | Cross-Enc + LLM | 20 | 0.5523 | 0.2764 | **0.7359** |
+| 1–5 | BM25 | BGE-M3 | 200 | Cross-Enc + LLM | 20 | 0.5769 | **0.4027** | 0.6468 |
+| free-answer | BM25 | BGE-M3 | 200 | Cross-Enc + LLM | 20 | 0.5342 | 0.3140 | 0.6477 |
+| 3 | BM25 | BGE-M3 | 200 | Cross-Enc + LLM | 20 | 0.5783 | 0.3344 | 0.7073 |
 
 ### LLM Fallback Results
 
