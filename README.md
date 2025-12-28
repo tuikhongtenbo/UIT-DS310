@@ -122,9 +122,7 @@ The retrieval stage uses a hybrid approach combining two methods:
 
 Grid search was performed on the training set (using public training questions only, no test leakage) to optimize weights W1 (BM25) and W2 (BGE-M3):
 
-![Grid Search Results for W1 and W2](path/to/grid_search_results.png)
-
-*Grid search results for W1 and W2 on training set*
+![Grid Search Results for W1 and W2](img/grid_search_stage1.png)
 
 **Optimal Weights:**
 - W1 (BM25) = 0.3
@@ -206,9 +204,7 @@ The reranking stage uses two layers:
 
 ### Full Pipeline Results on Private Test
 
-![Full Pipeline Results on Private Test](path/to/full_pipeline_results_private_test.png)
-
-*Full pipeline evaluation results on private test set*
+![Full Pipeline Results on Private Test](img/private_test_results.png)
 
 ### Detailed Results
 
