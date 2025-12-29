@@ -278,7 +278,8 @@ Experiment configurations are defined in `config/exp_*.yaml`:
 
 ## References
 
-- Tan-Minh Nguyen, Hoang-Trung Nguyen, Trong-Khoi Dao, Xuan-Hieu Phan, Ha-Thanh Nguyen, and Thi-Hai-Yen Vuong. 2025b. VLQA: The First Comprehensive, Large, and High-Quality Vietnamese Dataset for Legal Question Answering.
+- Tan-Minh Nguyen, Hoang-Trung Nguyen, Trong-Khoi Dao, Xuan-Hieu Phan, Ha-Thanh Nguyen, and Thi-Hai-Yen Vuong. 2025b. VLQA: The First Comprehensive, Large, and High-Quality Vietnamese Dataset for Legal Question Answering. *arXiv preprint
+arXiv:2507.19995*.
 
 - Stephen E. Robertson and Steve Walker. 1994. Some Simple Effective Approximations to the 2-Poisson Model for Probabilistic Weighted Retrieval. In *SIGIR '94: Proceedings of the 17th Annual International ACM SIGIR Conference on Research and Development in Information Retrieval*, pages 232–241, Dublin, Ireland. ACM.
 
