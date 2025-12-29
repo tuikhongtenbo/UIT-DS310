@@ -66,30 +66,7 @@ Ensure the following files are available:
 
 ## Pipeline Architecture
 
-```
-[Query] 
-    ↓
-[Stage 1: Retrieval]
-    ├─ BM25 (Lexical Retrieval)
-    ├─ BGE-M3 (Dense Retrieval)
-    └─ Weighted Score Fusion (W1 × BM25 + W2 × BGE-M3)
-    ↓
-[Top-k Candidates: 200]
-    ↓
-[Stage 2: Reranking]
-    ├─ Cross-Encoder Ensemble
-    │   ├─ GTE Reranker
-    │   ├─ BGE-V2 Reranker
-    │   └─ RRF Fusion
-    ↓
-[Top-k Candidates: 20]
-    ↓
-[LLM Reranker]
-    ├─ Qwen/Qwen3-4B-Instruct-2507 (Main)
-    └─ Qwen/Qwen2.5-7B-Instruct (Fallback)
-    ↓
-[Final Results: Top-k]
-```
+![Full Pipeline](img/pipeline.png)
 
 *Note: Detailed pipeline diagram will be replaced here*
 
