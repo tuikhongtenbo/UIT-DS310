@@ -253,9 +253,9 @@ Evaluation results table for different configurations:
 
 Results when using Qwen/Qwen2.5-7B-Instruct as fallback model:
 
-| Config | F2-MACRO | Precision | Recall |
+| LLM Output | F2-MACRO | Precision | Recall |
 |--------|----------|-----------|--------|
-| 6 (Free-answer) | 0.632 | 0.4872 | 0.6826 |
+| 4 | 0.632 | 0.4872 | 0.6826 |
 | 3 | 0.6312 | 0.509 | 0.6714 |
 
 ## Usage
