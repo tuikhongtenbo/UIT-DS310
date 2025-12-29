@@ -68,8 +68,6 @@ Ensure the following files are available:
 
 ![Full Pipeline](img/pipeline.png)
 
-*Note: Detailed pipeline diagram will be replaced here*
-
 ## Stage 1: Retrieval
 
 ### Description
