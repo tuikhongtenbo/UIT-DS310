@@ -55,7 +55,7 @@ Ensure the following files are available:
 
 ## Dataset
 
-### VLSP 2025 DRiLL Dataset Statistics
+### VLQA Dataset Statistics
 
 | Dataset | Total (rows) | Max (words) | Min (words) | Avg (words) |
 |---------|--------------|------------|-------------|-------------|
@@ -63,6 +63,55 @@ Ensure the following files are available:
 | Train (Questions) | 2,190 | 45 | 6 | 19.71 |
 | Public Test (Questions) | 312 | 42 | 11 | 20.00 |
 | Private Test (Questions) | 627 | 44 | 11 | 19.90 |
+
+### Data Format
+
+#### Legal Articles Format (`legal_corpus.json`)
+
+Each legal article is stored as a JSON object with the following structure:
+
+```json
+{
+  "id": 0,
+  "law_id": "14/2022/TT-NHNN",
+  "content": [
+    {
+      "aid": 0,
+      "content_Article": "1. Thông tư này quy định mã số, tiêu chuẩn chuyên môn, nghiệp vụ và xếp lương đối với các ngạch công chức chuyên ngành Ngân hàng.\n\n2. Thông tư này áp dụng đối với công chức làm việc tại các đơn vị thuộc Ngân hàng Nhà nước Việt Nam (gọi tắt là Ngân hàng Nhà nước)."
+    },
+    {
+      "aid": 1,
+      "content_Article": "1. Kiểm soát viên cao cấp ngân hàng Mã số: 07.044 2. Kiểm soát viên chính ngân hàng Mã số: 07.045 3. Kiểm soát viên ngân hàng Mã số: 07.046 4. Thủ kho, thủ quỹ ngân hàng Mã số: 07.048 5. Nhân viên Tiền tệ - Kho quỹ Mã số: 07.047 "
+    }
+  ]
+}
+```
+
+**Fields:**
+- `id`: Unique identifier for the legal document
+- `law_id`: Legal document identifier (e.g., circular number, decree number)
+- `content`: Array of article sections
+  - `aid`: Article identifier within the document
+  - `content_Article`: Text content of the article
+
+#### Training Data Format (`train.json`)
+
+Each training question is stored as a JSON object with the following structure:
+
+```json
+{
+  "qid": 933,
+  "question": "Thưa luật sư tôi có đăng ký kết hôn trên pháp luật nhưng nay vợ chồng bỏ nhau theo phong tục tập quán như vậy tôi có được phép kết hôn với người khác không ạ?",
+  "relevant_laws": [53877, 53875, 53929],
+  "answer": "ở đây nếu vợ chồng bạn bỏ nhau nhưng chưa ly hôn (chưa có bản án/quyết định của Tòa) thì không thể kết hôn được với người khác. Do đó, chỉ khi vợ chồng bạn đã ly hôn theo bản án/quyết định của Tòa thì khi đó bạn mới có quyền kết hôn với người mới."
+}
+```
+
+**Fields:**
+- `qid`: Unique question identifier
+- `question`: The legal question in Vietnamese
+- `relevant_laws`: Array of relevant legal article IDs (references to `id` field in `legal_corpus.json`)
+- `answer`: The answer to the question
 
 ## Pipeline Architecture
 
@@ -127,7 +176,12 @@ The reranking stage uses two layers:
 - Chunking with `chunk_size=2048`, `overlap=128` for reranker
 - Documents stored in ChromaDB with collection `reranker_legal_articles`
 
-**Top-k after Cross-Encoder:** 20 candidates selected for LLM reranker
+**Top-k after RRF:** Top-20 candidates selected from RRF output
+
+**Threshold Decision:**
+- After RRF produces Top-20 candidates, a confidence threshold check is performed (score > 0.8)
+- **YES (High Confidence)**: If any candidate has score > 0.8, output relevant articles directly
+- **NO (Low Confidence)**: If no candidate exceeds threshold, pass Top-20 candidates to LLM Reranker
 
 ### LLM Reranker
 
@@ -221,3 +275,15 @@ python main.py --exp 7 --input ./dataset/private_test.json --output ./results/ex
 
 Experiment configurations are defined in `config/exp_*.yaml`:
 - `exp_1.yaml` to `exp_12.yaml`: Different experiment configurations
+
+## References
+
+- Tan-Minh Nguyen, Hoang-Trung Nguyen, Trong-Khoi Dao, Xuan-Hieu Phan, Ha-Thanh Nguyen, and Thi-Hai-Yen Vuong. 2025b. VLQA: The First Comprehensive, Large, and High-Quality Vietnamese Dataset for Legal Question Answering.
+
+- Stephen E. Robertson and Steve Walker. 1994. Some Simple Effective Approximations to the 2-Poisson Model for Probabilistic Weighted Retrieval. In *SIGIR '94: Proceedings of the 17th Annual International ACM SIGIR Conference on Research and Development in Information Retrieval*, pages 232–241, Dublin, Ireland. ACM.
+
+- Stephen Robertson and Hugo Zaragoza. 2009. The Probabilistic Relevance Framework: BM25 and Beyond. *Foundations and Trends in Information Retrieval*, 3(4):333–389.
+
+- Jianlv Chen, Shitao Xiao, Peitian Zhang, Kun Luo, Defu Lian, and Zheng Liu. 2024. M3-Embedding: Multi-Linguality, Multi-Functionality, Multi-Granularity Text Embeddings Through Self-Knowledge Distillation. In *Findings of the Association for Computational Linguistics: ACL 2024*, pages 2318–2335, Bangkok, Thailand. Association for Computational Linguistics.
+
+- Zehan Li, Xin Zhang, Yanzhao Zhang, Dingkun Long, Pengjun Xie, and Meishan Zhang. 2023. Towards General Text Embeddings with Multi-stage Contrastive Learning. *arXiv preprint arXiv:2308.03281*.
